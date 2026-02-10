@@ -46,7 +46,11 @@ function getSvgPathFromStroke(points: number[][]) {
   return d.join(" ");
 }
 
-export default function Canvas() {
+type CanvasProps = {
+  className?: string;
+};
+
+export default function Canvas({ className }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [activeStrokeId, setActiveStrokeId] = useState<number | null>(null);
@@ -115,7 +119,9 @@ export default function Canvas() {
   }, []);
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
+    <div
+      className={`relative h-full w-full overflow-hidden bg-zinc-950 text-zinc-100 ${className ?? ""}`}
+    >
       <div className="pointer-events-none absolute left-6 top-6 z-10 max-w-xs text-sm uppercase tracking-[0.25em] text-zinc-400">
         Knitspace
       </div>
@@ -147,6 +153,6 @@ export default function Canvas() {
           return <path key={stroke.id} d={pathData} fill="white" stroke="none" />;
         })}
       </svg>
-    </main>
+    </div>
   );
 }

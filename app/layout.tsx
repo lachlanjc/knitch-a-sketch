@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Faculty_Glyphic, Nunito_Sans } from "next/font/google";
 import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-const nunitoSans = Nunito_Sans({variable:'--font-sans'});
+const nunitoSans = Nunito_Sans({ variable: "--font-sans" });
 
 const flared = Faculty_Glyphic({
   variable: "--font-faculty-glyphic",
@@ -26,7 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={nunitoSans.variable}>
-      <body className={`${flared.variable} antialiased`}>{children}</body>
+      <body className={`${flared.variable} antialiased`}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }
