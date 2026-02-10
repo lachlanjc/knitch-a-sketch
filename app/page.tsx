@@ -1,3 +1,5 @@
+import Canvas from "./components/Canvas";
+
 export default function Home() {
-  return <h1>KNITSPACE</h1>;
+  return <Canvas />;
 }
