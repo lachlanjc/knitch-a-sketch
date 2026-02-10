@@ -1,5 +1,5 @@
-import Canvas from "./components/Canvas";
+import { ComponentExample } from "@/components/component-example";
 
-export default function Home() {
-  return <Canvas />;
+export default function Page() {
+return <ComponentExample />;
 }
