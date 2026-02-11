@@ -5,13 +5,11 @@ import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 import { useChat } from "@ai-sdk/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { ProjectContextValue } from "./ProjectContext";
+
 import Canvas from "./Canvas";
 import Chat from "./Chat";
-import {
-  ProjectContext,
-  type ProjectContextValue,
-  useProjectContext,
-} from "./ProjectContext";
+import { ProjectContext, useProjectContext } from "./ProjectContext";
 
 const STORAGE_KEY = "knitspace.chat.history";
 
@@ -26,10 +24,7 @@ type ProjectPanelProps = PropsWithChildren;
 
 type ProjectChatProps = ChatProps;
 
-const ProjectCanvas = ({
-  idleMs = 500,
-  ...props
-}: ProjectCanvasProps) => {
+const ProjectCanvas = ({ idleMs = 500, ...props }: ProjectCanvasProps) => {
   const {
     actions: { submitSnapshot, cancelPending },
   } = useProjectContext();
@@ -41,7 +36,7 @@ const ProjectCanvas = ({
       }
       void submitSnapshot(version, snapshot);
     },
-    [submitSnapshot],
+    [submitSnapshot]
   );
 
   const handleDrawStart = useCallback(() => {
@@ -98,7 +93,7 @@ const Project = ({ children }: PropsWithChildren) => {
         submittingRef.current = false;
       }
     },
-    [sendMessage],
+    [sendMessage]
   );
 
   const cancelPending = useCallback(() => {
@@ -108,7 +103,7 @@ const Project = ({ children }: PropsWithChildren) => {
     stop();
     setMessages((prev) => {
       const lastUserIndex = [...prev]
-        .reverse()
+        .toReversed()
         .findIndex((message) => message.role === "user");
       if (lastUserIndex === -1) {
         return prev;
@@ -170,19 +165,19 @@ const Project = ({ children }: PropsWithChildren) => {
 
   const contextValue = useMemo<ProjectContextValue>(
     () => ({
-      state: {
-        messages,
-        status,
-        selectedUserId,
-      },
       actions: {
-        submitSnapshot,
         cancelPending,
         clearHistory,
         setSelectedUserId,
+        submitSnapshot,
       },
       meta: {
         storageKey: STORAGE_KEY,
+      },
+      state: {
+        messages,
+        selectedUserId,
+        status,
       },
     }),
     [
@@ -192,7 +187,7 @@ const Project = ({ children }: PropsWithChildren) => {
       selectedUserId,
       status,
       submitSnapshot,
-    ],
+    ]
   );
 
   return (
@@ -206,8 +201,8 @@ const Project = ({ children }: PropsWithChildren) => {
 
 const ProjectWithSlots = Object.assign(Project, {
   Canvas: ProjectCanvas,
-  Panel: ProjectPanel,
   Chat: ProjectChat,
+  Panel: ProjectPanel,
 });
 
 export default ProjectWithSlots;

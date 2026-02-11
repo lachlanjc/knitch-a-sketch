@@ -1,16 +1,12 @@
 "use client";
 
-import type { FileUIPart, UIMessage, UIMessagePart } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
+import type { ForwardedRef, HTMLAttributes, ReactNode } from "react";
 
+import Image from "next/image";
+import { forwardRef, useCallback, useEffect, useMemo, useRef } from "react";
 import Icon from "supercons";
-import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import {
-  Attachment,
-  AttachmentPreview,
-  AttachmentRemove,
-  Attachments,
-} from "@/components/ai-elements/attachments";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -32,8 +28,89 @@ interface MessageProps {
   getItemRef?: (id: string) => (node: HTMLDivElement | null) => void;
 }
 
-const getFileParts = (parts: UIMessagePart[]) =>
+type AttachmentData = FileUIPart & { id: string };
+
+const getFileParts = (parts: UIMessage["parts"]) =>
   parts.filter((part): part is FileUIPart => part.type === "file");
+
+const Attachments = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => (
+  <div className={className} role="list">
+    {children}
+  </div>
+);
+
+const Attachment = forwardRef(
+  (
+    {
+      data,
+      className,
+      children,
+      onRemove,
+      ...props
+    }: HTMLAttributes<HTMLDivElement> & {
+      data: AttachmentData;
+      onRemove?: () => void;
+    },
+    ref: ForwardedRef<HTMLDivElement>
+  ) => (
+    <div
+      className={`group relative size-24 overflow-hidden rounded-lg ${className ?? ""}`}
+      data-attachment-id={data.id}
+      data-has-remove={onRemove ? "true" : "false"}
+      ref={ref}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+);
+
+const AttachmentPreview = ({ data }: { data: AttachmentData }) => {
+  if (data.type !== "file" || !data.url) {
+    return (
+      <div className="flex size-full items-center justify-center bg-zinc-100 text-xs text-zinc-500">
+        File
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      alt={data.filename ?? "Sketch"}
+      className="size-full object-cover"
+      height={96}
+      src={data.url}
+      width={96}
+    />
+  );
+};
+
+const AttachmentRemove = ({ onRemove }: { onRemove?: () => void }) => {
+  if (!onRemove) {
+    return null;
+  }
+
+  return (
+    <Button
+      aria-label="Remove"
+      className="absolute right-2 top-2 size-6 rounded-full bg-white/80 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+      onClick={(event) => {
+        event.stopPropagation();
+        onRemove();
+      }}
+      type="button"
+      variant="ghost"
+    >
+      x<span className="sr-only">Remove</span>
+    </Button>
+  );
+};
 
 const MessageAttachments = ({
   attachments,
@@ -44,10 +121,7 @@ const MessageAttachments = ({
   onSelectScroll,
   getItemRef,
 }: MessageProps) => (
-  <Attachments
-    variant="grid"
-    className="p-2 -ml-2 w-full flex-nowrap gap-3 overflow-x-auto snap-x snap-mandatory"
-  >
+  <Attachments className="flex w-full flex-nowrap gap-3 overflow-x-auto p-2 -ml-2 snap-x snap-mandatory">
     {attachments.map((file) => {
       const isSelected = file.id === selectedId;
       const isPending = file.id === pendingId;
@@ -71,8 +145,10 @@ const MessageAttachments = ({
           }
           ref={getItemRef ? getItemRef(file.id) : undefined}
         >
-          <AttachmentPreview />
-          <AttachmentRemove />
+          <AttachmentPreview data={file} />
+          <AttachmentRemove
+            onRemove={onRemove ? () => onRemove(file.id) : undefined}
+          />
           {isPending ? (
             <div className="absolute inset-0 grid place-items-center bg-zinc-950/60">
               <Spinner className="size-4" />
@@ -92,25 +168,27 @@ export default function Sketchstrip() {
   const lastUserIdRef = useRef<string | null>(null);
   const filmstripItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const userEntries = useMemo<UserEntry[]>(() => {
-    return messages
-      .map((message: UIMessage, index) => {
-        if (message.role !== "user") {
-          return null;
-        }
-        const files = getFileParts(message.parts);
-        const firstFile = files[0];
-        if (!firstFile) {
-          return null;
-        }
-        return {
-          id: message.id,
-          file: firstFile,
-          messageIndex: index,
-        };
-      })
-      .filter((entry): entry is UserEntry => Boolean(entry));
-  }, [messages]);
+  const userEntries = useMemo<UserEntry[]>(
+    () =>
+      messages
+        .map((message: UIMessage, index) => {
+          if (message.role !== "user") {
+            return null;
+          }
+          const files = getFileParts(message.parts);
+          const firstFile = files[0];
+          if (!firstFile) {
+            return null;
+          }
+          return {
+            file: firstFile,
+            id: message.id,
+            messageIndex: index,
+          };
+        })
+        .filter((entry): entry is UserEntry => Boolean(entry)),
+    [messages]
+  );
 
   const filmstripAttachments = useMemo(
     () =>
@@ -118,7 +196,7 @@ export default function Sketchstrip() {
         ...entry.file,
         id: entry.id,
       })),
-    [userEntries],
+    [userEntries]
   );
 
   useEffect(() => {
@@ -130,7 +208,7 @@ export default function Sketchstrip() {
       return;
     }
 
-    const latestId = userEntries[userEntries.length - 1]?.id ?? null;
+    const latestId = userEntries.at(-1)?.id ?? null;
     if (latestId && latestId !== lastUserIdRef.current) {
       lastUserIdRef.current = latestId;
       setSelectedUserId(latestId);
@@ -139,13 +217,10 @@ export default function Sketchstrip() {
     }
   }, [selectedUserId, setSelectedUserId, userEntries]);
 
-  const handleFilmstripSelect = useCallback(
-    (id: string) => {
-      const node = filmstripItemRefs.current.get(id);
-      node?.scrollIntoView({ block: "center", inline: "center" });
-    },
-    [],
-  );
+  const handleFilmstripSelect = useCallback((id: string) => {
+    const node = filmstripItemRefs.current.get(id);
+    node?.scrollIntoView({ block: "center", inline: "center" });
+  }, []);
 
   const getFilmstripItemRef = useCallback(
     (id: string) => (node: HTMLDivElement | null) => {
@@ -155,7 +230,7 @@ export default function Sketchstrip() {
         filmstripItemRefs.current.delete(id);
       }
     },
-    [],
+    []
   );
 
   const pendingEntryId = useMemo(() => {

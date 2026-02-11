@@ -20,5 +20,5 @@
     "newlinesBetween": true,
     "order": "asc",
   },
-  "ignorePatterns": ["components/ai-elements/**", "components/ui/**"],
+  "ignorePatterns": [".agents/skills/**", "components/ui/**"],
 }

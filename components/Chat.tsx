@@ -1,15 +1,9 @@
 "use client";
 
-import type { FileUIPart, UIMessage, UIMessagePart } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
 
 import { useCallback, useMemo } from "react";
 
-import {
-  Attachment,
-  AttachmentInfo,
-  AttachmentPreview,
-  Attachments,
-} from "@/components/ai-elements/attachments";
 import { Badge } from "@/components/ui/badge";
 
 import Generating from "./Generating";
@@ -43,53 +37,63 @@ export default function Chat({ className }: ChatProps) {
     state: { messages, selectedUserId },
   } = useProjectContext();
 
-  const getTextFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("");
-  }, []);
+  const getTextFromParts = useCallback(
+    (parts: UIMessage["parts"]) =>
+      parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join(""),
+    []
+  );
 
-  const getSourcesFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
-      .filter((part) => part.type === "source-url")
-      .map((part) => ({
-        href: part.url,
-        title: part.title ?? part.url,
-        id: part.sourceId,
-      }));
-  }, []);
+  const getSourcesFromParts = useCallback(
+    (parts: UIMessage["parts"]) =>
+      parts
+        .filter((part) => part.type === "source-url")
+        .map((part) => ({
+          href: part.url,
+          id: part.sourceId,
+          title: part.title ?? part.url,
+        })),
+    []
+  );
 
-  const getReasoningFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
-      .filter((part) => part.type === "reasoning")
-      .map((part) => part.text)
-      .join("\n");
-  }, []);
+  const getReasoningFromParts = useCallback(
+    (parts: UIMessage["parts"]) =>
+      parts
+        .filter((part) => part.type === "reasoning")
+        .map((part) => part.text)
+        .join("\n"),
+    []
+  );
 
-  const getFileParts = useCallback((parts: UIMessagePart[]) => {
-    return parts.filter((part): part is FileUIPart => part.type === "file");
-  }, []);
+  const getFileParts = useCallback(
+    (parts: UIMessage["parts"]) =>
+      parts.filter((part): part is FileUIPart => part.type === "file"),
+    []
+  );
 
-  const userEntries = useMemo<UserEntry[]>(() => {
-    return messages
-      .map((message: UIMessage, index) => {
-        if (message.role !== "user") {
-          return null;
-        }
-        const files = getFileParts(message.parts);
-        const firstFile = files[0];
-        if (!firstFile) {
-          return null;
-        }
-        return {
-          id: message.id,
-          file: firstFile,
-          messageIndex: index,
-        };
-      })
-      .filter((entry): entry is UserEntry => Boolean(entry));
-  }, [getFileParts, messages]);
+  const userEntries = useMemo<UserEntry[]>(
+    () =>
+      messages
+        .map((message: UIMessage, index) => {
+          if (message.role !== "user") {
+            return null;
+          }
+          const files = getFileParts(message.parts);
+          const firstFile = files[0];
+          if (!firstFile) {
+            return null;
+          }
+          return {
+            file: firstFile,
+            id: message.id,
+            messageIndex: index,
+          };
+        })
+        .filter((entry): entry is UserEntry => Boolean(entry)),
+    [getFileParts, messages]
+  );
 
   const selectedEntry = useMemo(() => {
     if (!selectedUserId) {
@@ -168,32 +172,6 @@ export default function Chat({ className }: ChatProps) {
         {selectedEntry ? (
           selectedAssistant ? (
             <div>
-              {selectedAssistantSources.length ? (
-                <div className="mb-4">
-                  <Sources>
-                    <SourcesTrigger count={selectedAssistantSources.length} />
-                    <SourcesContent>
-                      {selectedAssistantSources.map((source) => (
-                        <Source
-                          href={source.href}
-                          key={source.id}
-                          title={source.title}
-                        />
-                      ))}
-                    </SourcesContent>
-                  </Sources>
-                </div>
-              ) : null}
-              {selectedAssistantReasoning ? (
-                <div className="mb-4">
-                  <Reasoning duration={0}>
-                    <ReasoningTrigger />
-                    <ReasoningContent>
-                      {selectedAssistantReasoning}
-                    </ReasoningContent>
-                  </Reasoning>
-                </div>
-              ) : null}
               {parsedPattern ? (
                 <div className="flex flex-col h-full gap-6 overflow-y-auto snap-y snap-mandatory px-6 py-6 -my-6 max-h-[75vb]">
                   {parsedPattern.pieces.map((piece, index) => {
@@ -214,7 +192,10 @@ export default function Chat({ className }: ChatProps) {
                         </div>
                         <div className="-mb-1 -ml-0.5 flex flex-wrap items-center gap-3 text-xs text-zinc-600">
                           <span className="flex items-center gap-1">
-                            <YarnIcon className="size-6" color={piece.yarnColor} />
+                            <YarnIcon
+                              className="size-6"
+                              color={piece.yarnColor}
+                            />
                             {piece.yarn}
                           </span>
                         </div>
@@ -227,23 +208,6 @@ export default function Chat({ className }: ChatProps) {
                     );
                   })}
                 </div>
-              ) : selectedAssistantText ? (
-                <div className="text-sm text-zinc-800">
-                  {selectedAssistantText}
-                </div>
-              ) : null}
-              {selectedAssistantFiles.length ? (
-                <Attachments className="mt-2" variant="inline">
-                  {selectedAssistantFiles.map((attachment, index) => {
-                    const id = `${selectedAssistant.id}-${index}`;
-                    return (
-                      <Attachment data={{ ...attachment, id }} key={id}>
-                        <AttachmentPreview />
-                        <AttachmentInfo />
-                      </Attachment>
-                    );
-                  })}
-                </Attachments>
               ) : null}
             </div>
           ) : (

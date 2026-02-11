@@ -246,7 +246,9 @@ export default function Canvas({
   }, [clearIdleTimer]);
 
   return (
-    <div className={`relative h-full w-full overflow-hidden ${className ?? ""}`}>
+    <div
+      className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
+    >
       <Button
         type="button"
         size="icon-lg"
@@ -274,7 +276,9 @@ export default function Canvas({
         {strokes.map((stroke) => {
           const strokePoints = getStroke(stroke.points, STROKE_OPTIONS);
           const pathData = getSvgPathFromStroke(strokePoints);
-          return <path key={stroke.id} d={pathData} fill="black" stroke="none" />;
+          return (
+            <path key={stroke.id} d={pathData} fill="black" stroke="none" />
+          );
         })}
       </svg>
     </div>
