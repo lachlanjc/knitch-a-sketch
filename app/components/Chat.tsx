@@ -2,6 +2,18 @@
 
 import type { FileUIPart, UIMessage, UIMessagePart } from "ai";
 
+import { useChat } from "@ai-sdk/react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import Icon from "supercons";
+
 import {
   Attachment,
   AttachmentInfo,
@@ -9,8 +21,6 @@ import {
   AttachmentRemove,
   Attachments,
 } from "@/components/ai-elements/attachments";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Message,
   MessageContent,
@@ -27,47 +37,39 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from "@/components/ai-elements/sources";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+
 import Generating from "./Generating";
 import YarnIcon from "./YarnIcon";
-import { useChat } from "@ai-sdk/react";
-import Icon from "supercons";
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 
-type ChatProps = {
+interface ChatProps {
   getCanvasSnapshot?: () => Promise<string | null>;
-};
+}
 
-export type ChatHandle = {
+export interface ChatHandle {
   submitCanvasSnapshot: () => Promise<void>;
   cancelPending: () => void;
-};
+}
 
-type UserEntry = {
+interface UserEntry {
   id: string;
   file: FileUIPart;
   messageIndex: number;
-};
+}
 
-type Piece = {
+interface Piece {
   name: string;
   quanity?: number;
   yarn: string;
   yarnColor: string;
   instructions: string[];
-};
+}
 
-type Pattern = {
+interface Pattern {
   pieces: Piece[];
-};
+}
 
 interface MessageProps {
   attachments: (FileUIPart & { id: string })[];
@@ -165,7 +167,6 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
   useImperativeHandle(
     ref,
     () => ({
-      submitCanvasSnapshot,
       cancelPending: () => {
         if (status === "ready") {
           return;
@@ -184,8 +185,9 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
         setSelectedUserId(null);
         lastUserIdRef.current = null;
       },
+      submitCanvasSnapshot,
     }),
-    [setMessages, status, stop, submitCanvasSnapshot],
+    [setMessages, status, stop, submitCanvasSnapshot]
   );
 
   const handleClearHistory = useCallback(() => {
@@ -237,36 +239,27 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
     }
   }, [messages]);
 
-  const getTextFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
+  const getTextFromParts = useCallback((parts: UIMessagePart[]) => parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)
-      .join("");
-  }, []);
+      .join(""), []);
 
-  const getSourcesFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
+  const getSourcesFromParts = useCallback((parts: UIMessagePart[]) => parts
       .filter((part) => part.type === "source-url")
       .map((part) => ({
         href: part.url,
         title: part.title ?? part.url,
         id: part.sourceId,
-      }));
-  }, []);
+      })), []);
 
-  const getReasoningFromParts = useCallback((parts: UIMessagePart[]) => {
-    return parts
+  const getReasoningFromParts = useCallback((parts: UIMessagePart[]) => parts
       .filter((part) => part.type === "reasoning")
       .map((part) => part.text)
-      .join("\n");
-  }, []);
+      .join("\n"), []);
 
-  const getFileParts = useCallback((parts: UIMessagePart[]) => {
-    return parts.filter((part): part is FileUIPart => part.type === "file");
-  }, []);
+  const getFileParts = useCallback((parts: UIMessagePart[]) => parts.filter((part): part is FileUIPart => part.type === "file"), []);
 
-  const userEntries = useMemo<UserEntry[]>(() => {
-    return messages
+  const userEntries = useMemo<UserEntry[]>(() => messages
       .map((message: UIMessage, index) => {
         if (message.role !== "user") {
           return null;
@@ -282,8 +275,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
           messageIndex: index,
         };
       })
-      .filter((entry): entry is UserEntry => Boolean(entry));
-  }, [getFileParts, messages]);
+      .filter((entry): entry is UserEntry => Boolean(entry)), [getFileParts, messages]);
 
   const filmstripAttachments = useMemo(
     () =>
@@ -291,7 +283,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
         ...entry.file,
         id: entry.id,
       })),
-    [userEntries],
+    [userEntries]
   );
 
   useEffect(() => {
@@ -303,7 +295,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
       return;
     }
 
-    const latestId = userEntries[userEntries.length - 1]?.id ?? null;
+    const latestId = userEntries.at(-1)?.id ?? null;
     if (latestId && latestId !== lastUserIdRef.current) {
       lastUserIdRef.current = latestId;
       setSelectedUserId(latestId);
@@ -325,7 +317,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
         filmstripItemRefs.current.delete(id);
       }
     },
-    [],
+    []
   );
 
   const selectedEntry = useMemo(() => {
@@ -348,12 +340,10 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
       }
       return null;
     },
-    [messages],
+    [messages]
   );
 
-  const selectedAssistant = useMemo(() => {
-    return getAssistantMessageForEntry(selectedEntry);
-  }, [getAssistantMessageForEntry, selectedEntry]);
+  const selectedAssistant = useMemo(() => getAssistantMessageForEntry(selectedEntry), [getAssistantMessageForEntry, selectedEntry]);
 
   const pendingEntryId = useMemo(() => {
     for (let i = userEntries.length - 1; i >= 0; i -= 1) {
@@ -412,8 +402,8 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
     selectedEntry && pendingEntryId === selectedEntry.id;
 
   return (
-    <div className="">
-      <div className="flex-1 ">
+    <>
+      <div>
         {selectedEntry ? (
           selectedAssistant ? (
             <div>
@@ -484,7 +474,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
         )}
       </div>
       {filmstripAttachments.length ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center">
+        <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center">
           <div className="pointer-events-auto flex w-full max-w-5xl items-center gap-3 px-4">
             <div className="min-w-0 flex-1">
               <MessageAttachments
@@ -507,9 +497,9 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
               <Icon glyph="view-close-small" size={24} />
             </Button>
           </div>
-        </div>
+        </nav>
       ) : null}
-    </div>
+    </>
   );
 });
 

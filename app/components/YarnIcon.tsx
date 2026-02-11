@@ -2,10 +2,10 @@
 
 import { cn } from "@/lib/utils";
 
-type YarnIconProps = {
+interface YarnIconProps {
   className?: string;
   color?: string;
-};
+}
 
 export default function YarnIcon({ className, color }: YarnIconProps) {
   return (

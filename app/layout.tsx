@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+
 import { Faculty_Glyphic, Nunito_Sans } from "next/font/google";
+
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -16,8 +18,8 @@ const flared = Faculty_Glyphic({
 // });
 
 export const metadata: Metadata = {
-  title: "",
   description: "",
+  title: "",
 };
 
 export default function RootLayout({

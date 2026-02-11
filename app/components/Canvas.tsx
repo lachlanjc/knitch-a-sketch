@@ -1,5 +1,8 @@
 "use client";
 
+import type { PointerEvent as ReactPointerEvent } from "react";
+
+import getStroke from "perfect-freehand";
 import {
   forwardRef,
   useCallback,
@@ -9,32 +12,31 @@ import {
   useState,
 } from "react";
 import Icon from "supercons";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import getStroke from "perfect-freehand";
+
 import { Button } from "@/components/ui/button";
 
 type Point = [number, number, number];
 
-type Stroke = {
+interface Stroke {
   id: number;
   points: Point[];
-};
+}
 
 const STROKE_OPTIONS = {
-  size: 8,
-  thinning: 0.6,
-  smoothing: 0.6,
-  streamline: 0.5,
   easing: (t: number) => t,
-  start: {
-    taper: 2,
-    cap: true,
-  },
   end: {
     taper: 4,
     cap: true,
   },
   simulatePressure: true,
+  size: 8,
+  smoothing: 0.6,
+  start: {
+    taper: 2,
+    cap: true,
+  },
+  streamline: 0.5,
+  thinning: 0.6,
 } as const;
 
 function getSvgPathFromStroke(points: number[][]) {
@@ -48,23 +50,23 @@ function getSvgPathFromStroke(points: number[][]) {
       acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
       return acc;
     },
-    ["M", ...points[0], "Q"] as (string | number)[],
+    ["M", ...points[0], "Q"] as (string | number)[]
   );
 
   d.push("Z");
   return d.join(" ");
 }
 
-type CanvasProps = {
+interface CanvasProps {
   className?: string;
   idleMs?: number;
   onIdle?: (version: number) => void;
   onDrawStart?: () => void;
-};
+}
 
-export type CanvasHandle = {
+export interface CanvasHandle {
   getSnapshotDataUrl: () => Promise<string | null>;
-};
+}
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(
   ({ className, idleMs = 3000, onIdle, onDrawStart }, ref) => {
@@ -76,7 +78,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
     const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const drawVersionRef = useRef(0);
     const clearRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null,
+      null
     );
 
     useEffect(() => {
@@ -148,7 +150,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
         setActiveStrokeId(id);
         event.currentTarget.setPointerCapture(event.pointerId);
       },
-      [clearIdleTimer, getPoint],
+      [clearIdleTimer, getPoint]
     );
 
     const handlePointerMove = useCallback(
@@ -167,11 +169,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
           prev.map((stroke) =>
             stroke.id === activeStrokeId
               ? { ...stroke, points: [...stroke.points, point] }
-              : stroke,
-          ),
+              : stroke
+          )
         );
       },
-      [activeStrokeId, clearIdleTimer, getPoint],
+      [activeStrokeId, clearIdleTimer, getPoint]
     );
 
     const endStroke = useCallback(() => {
@@ -252,7 +254,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
       () => ({
         getSnapshotDataUrl,
       }),
-      [getSnapshotDataUrl],
+      [getSnapshotDataUrl]
     );
 
     return (
@@ -293,7 +295,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
         </svg>
       </div>
     );
-  },
+  }
 );
 
 Canvas.displayName = "Canvas";

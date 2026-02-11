@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import Canvas, { type CanvasHandle } from "./Canvas";
-import Chat, { type ChatHandle } from "./Chat";
+
+import Canvas from './Canvas';
+import type { CanvasHandle } from './Canvas';
+import Chat from './Chat';
+import type { ChatHandle } from './Chat';
 
 export default function Project() {
   const canvasRef = useRef<CanvasHandle | null>(null);
