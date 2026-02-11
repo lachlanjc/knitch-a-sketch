@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import getStroke from "perfect-freehand";
 
@@ -50,7 +50,11 @@ type CanvasProps = {
   className?: string;
 };
 
-export default function Canvas({ className }: CanvasProps) {
+export type CanvasHandle = {
+  getSnapshotDataUrl: () => Promise<string | null>;
+};
+
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ className }, ref) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [activeStrokeId, setActiveStrokeId] = useState<number | null>(null);
@@ -118,9 +122,76 @@ export default function Canvas({ className }: CanvasProps) {
     setActiveStrokeId(null);
   }, []);
 
+  const getSnapshotDataUrl = useCallback(async () => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return null;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return null;
+    }
+
+    const cloned = svg.cloneNode(true) as SVGSVGElement;
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+
+    cloned.setAttribute("width", `${width}`);
+    cloned.setAttribute("height", `${height}`);
+    if (!cloned.getAttribute("xmlns")) {
+      cloned.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    }
+    if (!cloned.getAttribute("viewBox")) {
+      cloned.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    }
+
+    const serializer = new XMLSerializer();
+    const svgMarkup = serializer.serializeToString(cloned);
+    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+
+    const image = new Image();
+    image.decoding = "async";
+    image.src = svgUrl;
+
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Failed to load SVG snapshot."));
+    });
+
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+
+    ctx.scale(dpr, dpr);
+    const background = svg.parentElement
+      ? getComputedStyle(svg.parentElement).backgroundColor
+      : "rgba(0, 0, 0, 0)";
+    if (background !== "rgba(0, 0, 0, 0)") {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+    }
+    ctx.drawImage(image, 0, 0, width, height);
+
+    return canvas.toDataURL("image/png");
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSnapshotDataUrl,
+    }),
+    [getSnapshotDataUrl],
+  );
+
   return (
     <div
-      className={`relative h-full w-full overflow-hidden bg-zinc-950 text-zinc-100 ${className ?? ""}`}
+      className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
     >
       <div className="pointer-events-none absolute left-6 top-6 z-10 max-w-xs text-sm uppercase tracking-[0.25em] text-zinc-400">
         Knitspace
@@ -150,9 +221,15 @@ export default function Canvas({ className }: CanvasProps) {
         {strokes.map((stroke) => {
           const strokePoints = getStroke(stroke.points, STROKE_OPTIONS);
           const pathData = getSvgPathFromStroke(strokePoints);
-          return <path key={stroke.id} d={pathData} fill="white" stroke="none" />;
+          return (
+            <path key={stroke.id} d={pathData} fill="black" stroke="none" />
+          );
         })}
       </svg>
     </div>
   );
-}
+});
+
+Canvas.displayName = "Canvas";
+
+export default Canvas;
