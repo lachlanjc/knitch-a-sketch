@@ -62,9 +62,9 @@ export default function Generating() {
   }, []);
 
   return (
-    <div className="flex items-center gap-3">
-      <Spinner className="size-4" />
-      <Shimmer className="text-sm text-zinc-400">{loadingVerb}</Shimmer>
+    <div className="flex flex-col items-center gap-3">
+      <Spinner className="size-12" />
+      <Shimmer className="text-lg text-zinc-600">{loadingVerb}</Shimmer>
     </div>
   );
 }
