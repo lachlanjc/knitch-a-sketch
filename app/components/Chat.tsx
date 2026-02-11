@@ -1,32 +1,20 @@
 "use client";
 
-import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import type { FileUIPart, UIMessage, UIMessagePart } from "ai";
 
 import {
   Attachment,
   AttachmentInfo,
   AttachmentPreview,
+  AttachmentRemove,
   Attachments,
 } from "@/components/ai-elements/attachments";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
+import { Button } from "@/components/ui/button";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputHeader,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
 import {
   Reasoning,
   ReasoningContent,
@@ -38,73 +26,202 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from "@/components/ai-elements/sources";
+import { Spinner } from "@/components/ui/spinner";
+import Generating from "./Generating";
 import { useChat } from "@ai-sdk/react";
-import { useCallback, useMemo, useState } from "react";
+import Icon from "supercons";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type ChatProps = {
   getCanvasSnapshot?: () => Promise<string | null>;
 };
 
-const Chat = ({ getCanvasSnapshot }: ChatProps) => {
-  const [text, setText] = useState<string>("");
-  const { messages, sendMessage, status } = useChat();
+export type ChatHandle = {
+  submitCanvasSnapshot: () => Promise<void>;
+  cancelPending: () => void;
+};
 
-  const addUserMessage = useCallback(
-    async (content: string, attachments: FileUIPart[] = []) => {
-      await sendMessage({
-        text: content,
-        files: attachments,
-      });
-    },
-    [sendMessage],
+type UserEntry = {
+  id: string;
+  file: FileUIPart;
+  messageIndex: number;
+};
+
+interface MessageProps {
+  attachments: (FileUIPart & { id: string })[];
+  onRemove?: (id: string) => void;
+  selectedId?: string | null;
+  pendingId?: string | null;
+  onSelect?: (id: string) => void;
+  onSelectScroll?: (id: string) => void;
+  getItemRef?: (id: string) => (node: HTMLDivElement | null) => void;
+}
+
+const MessageAttachments = ({
+  attachments,
+  onRemove,
+  selectedId,
+  pendingId,
+  onSelect,
+  onSelectScroll,
+  getItemRef,
+}: MessageProps) => (
+  <Attachments
+    variant="grid"
+    className="p-2 -ml-2 w-full flex-nowrap gap-3 overflow-x-auto snap-x snap-mandatory"
+  >
+    {attachments.map((file) => {
+      const isSelected = file.id === selectedId;
+      const isPending = file.id === pendingId;
+      return (
+        <Attachment
+          key={file.id}
+          data={file}
+          onRemove={onRemove ? () => onRemove(file.id) : undefined}
+          className={`shrink-0 cursor-pointer snap-start border transition ${
+            isSelected
+              ? "border-black ring-4 ring-black"
+              : "border-transparent hover:border-zinc-600"
+          }`}
+          onClick={
+            onSelect || onSelectScroll
+              ? () => {
+                  onSelect?.(file.id);
+                  onSelectScroll?.(file.id);
+                }
+              : undefined
+          }
+          ref={getItemRef ? getItemRef(file.id) : undefined}
+        >
+          <AttachmentPreview />
+          <AttachmentRemove />
+          {isPending ? (
+            <div className="absolute inset-0 grid place-items-center bg-zinc-950/60">
+              <Spinner className="size-4" />
+            </div>
+          ) : null}
+        </Attachment>
+      );
+    })}
+  </Attachments>
+);
+
+const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
+  const { messages, sendMessage, setMessages, status, stop } = useChat();
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+  const filmstripItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const hasLoadedHistoryRef = useRef(false);
+  const storageKey = "knitspace.chat.history";
+
+  const submitCanvasSnapshot = useCallback(async () => {
+    if (!getCanvasSnapshot || status === "streaming") {
+      return;
+    }
+
+    let snapshotUrl: string | null = null;
+    try {
+      snapshotUrl = await getCanvasSnapshot();
+    } catch {
+      snapshotUrl = null;
+    }
+
+    if (!snapshotUrl) {
+      return;
+    }
+
+    const file: FileUIPart = {
+      filename: `canvas-${Date.now()}.png`,
+      mediaType: "image/png",
+      type: "file",
+      url: snapshotUrl,
+    };
+
+    await sendMessage({ files: [file] });
+  }, [getCanvasSnapshot, sendMessage, status]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      submitCanvasSnapshot,
+      cancelPending: () => {
+        if (status === "ready") {
+          return;
+        }
+        stop();
+        setMessages((prev) => {
+          const lastUserIndex = [...prev]
+            .reverse()
+            .findIndex((message) => message.role === "user");
+          if (lastUserIndex === -1) {
+            return prev;
+          }
+          const index = prev.length - 1 - lastUserIndex;
+          return prev.slice(0, index);
+        });
+        setSelectedUserId(null);
+        lastUserIdRef.current = null;
+      },
+    }),
+    [setMessages, status, stop, submitCanvasSnapshot],
   );
 
-  const handleSubmit = useCallback(
-    async (message: PromptInputMessage) => {
-      const trimmedText = message.text.trim();
-      const hasText = Boolean(trimmedText);
+  const handleClearHistory = useCallback(() => {
+    setMessages([]);
+    setSelectedUserId(null);
+    lastUserIdRef.current = null;
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [setMessages, storageKey]);
 
-      if (!hasText) {
+  useEffect(() => {
+    if (hasLoadedHistoryRef.current) {
+      return;
+    }
+    hasLoadedHistoryRef.current = true;
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
         return;
       }
-
-      let snapshotUrl: string | null = null;
-      if (getCanvasSnapshot) {
-        try {
-          snapshotUrl = await getCanvasSnapshot();
-        } catch {
-          snapshotUrl = null;
-        }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setMessages(parsed);
       }
-      const files: FileUIPart[] = snapshotUrl
-        ? [
-            ...message.files,
-            {
-              filename: `canvas-${Date.now()}.png`,
-              mediaType: "image/png",
-              type: "file",
-              url: snapshotUrl,
-            },
-          ]
-        : message.files;
+    } catch {
+      // Ignore corrupted history
+    }
+  }, [setMessages]);
 
-      await addUserMessage(trimmedText, files);
-      setText("");
-    },
-    [addUserMessage, getCanvasSnapshot],
-  );
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
 
-  const handleTextChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setText(event.target.value);
-    },
-    [],
-  );
-
-  const isSubmitDisabled = useMemo(
-    () => !text.trim() || status === "streaming",
-    [text, status],
-  );
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // Ignore storage write failures
+    }
+  }, [messages]);
 
   const getTextFromParts = useCallback((parts: UIMessagePart[]) => {
     return parts
@@ -134,79 +251,239 @@ const Chat = ({ getCanvasSnapshot }: ChatProps) => {
     return parts.filter((part): part is FileUIPart => part.type === "file");
   }, []);
 
-  return (
-    <div className="relative flex size-full flex-col divide-y overflow-hidden">
-      <Conversation>
-        <ConversationContent>
-          {messages.map((message: UIMessage) => {
-            const textContent = getTextFromParts(message.parts);
-            const reasoning = getReasoningFromParts(message.parts);
-            const sources = getSourcesFromParts(message.parts);
-            const files = getFileParts(message.parts);
+  const userEntries = useMemo<UserEntry[]>(() => {
+    return messages
+      .map((message: UIMessage, index) => {
+        if (message.role !== "user") {
+          return null;
+        }
+        const files = getFileParts(message.parts);
+        const firstFile = files[0];
+        if (!firstFile) {
+          return null;
+        }
+        return {
+          id: message.id,
+          file: firstFile,
+          messageIndex: index,
+        };
+      })
+      .filter((entry): entry is UserEntry => Boolean(entry));
+  }, [getFileParts, messages]);
 
-            return (
-              <Message from={message.role} key={message.id}>
-                <div>
-                  {sources.length ? (
-                    <Sources>
-                      <SourcesTrigger count={sources.length} />
-                      <SourcesContent>
-                        {sources.map((source) => (
-                          <Source
-                            href={source.href}
-                            key={source.id}
-                            title={source.title}
-                          />
-                        ))}
-                      </SourcesContent>
-                    </Sources>
-                  ) : null}
-                  {reasoning ? (
-                    <Reasoning duration={0}>
-                      <ReasoningTrigger />
-                      <ReasoningContent>{reasoning}</ReasoningContent>
-                    </Reasoning>
-                  ) : null}
-                  <MessageContent>
-                    {textContent ? (
-                      <MessageResponse>{textContent}</MessageResponse>
+  const filmstripAttachments = useMemo(
+    () =>
+      userEntries.map((entry) => ({
+        ...entry.file,
+        id: entry.id,
+      })),
+    [userEntries],
+  );
+
+  useEffect(() => {
+    if (!userEntries.length) {
+      if (selectedUserId !== null) {
+        setSelectedUserId(null);
+      }
+      lastUserIdRef.current = null;
+      return;
+    }
+
+    const latestId = userEntries[userEntries.length - 1]?.id ?? null;
+    if (latestId && latestId !== lastUserIdRef.current) {
+      lastUserIdRef.current = latestId;
+      setSelectedUserId(latestId);
+      const node = filmstripItemRefs.current.get(latestId);
+      node?.scrollIntoView({ block: "center", inline: "center" });
+    }
+  }, [selectedUserId, userEntries]);
+
+  const handleFilmstripSelect = useCallback((id: string) => {
+    const node = filmstripItemRefs.current.get(id);
+    node?.scrollIntoView({ block: "center", inline: "center" });
+  }, []);
+
+  const getFilmstripItemRef = useCallback(
+    (id: string) => (node: HTMLDivElement | null) => {
+      if (node) {
+        filmstripItemRefs.current.set(id, node);
+      } else {
+        filmstripItemRefs.current.delete(id);
+      }
+    },
+    [],
+  );
+
+  const selectedEntry = useMemo(() => {
+    if (!selectedUserId) {
+      return null;
+    }
+    return userEntries.find((entry) => entry.id === selectedUserId) ?? null;
+  }, [selectedUserId, userEntries]);
+
+  const getAssistantMessageForEntry = useCallback(
+    (entry: UserEntry | null) => {
+      if (!entry) {
+        return null;
+      }
+      for (let i = entry.messageIndex + 1; i < messages.length; i += 1) {
+        const message = messages[i];
+        if (message?.role === "assistant") {
+          return message;
+        }
+      }
+      return null;
+    },
+    [messages],
+  );
+
+  const selectedAssistant = useMemo(() => {
+    return getAssistantMessageForEntry(selectedEntry);
+  }, [getAssistantMessageForEntry, selectedEntry]);
+
+  const pendingEntryId = useMemo(() => {
+    for (let i = userEntries.length - 1; i >= 0; i -= 1) {
+      const entry = userEntries[i];
+      if (!getAssistantMessageForEntry(entry)) {
+        return entry.id;
+      }
+    }
+    return null;
+  }, [getAssistantMessageForEntry, userEntries]);
+
+  const selectedAssistantText = useMemo(() => {
+    if (!selectedAssistant) {
+      return "";
+    }
+    return getTextFromParts(selectedAssistant.parts);
+  }, [getTextFromParts, selectedAssistant]);
+
+  const selectedAssistantSources = useMemo(() => {
+    if (!selectedAssistant) {
+      return [];
+    }
+    return getSourcesFromParts(selectedAssistant.parts);
+  }, [getSourcesFromParts, selectedAssistant]);
+
+  const selectedAssistantReasoning = useMemo(() => {
+    if (!selectedAssistant) {
+      return "";
+    }
+    return getReasoningFromParts(selectedAssistant.parts);
+  }, [getReasoningFromParts, selectedAssistant]);
+
+  const selectedAssistantFiles = useMemo(() => {
+    if (!selectedAssistant) {
+      return [];
+    }
+    return getFileParts(selectedAssistant.parts);
+  }, [getFileParts, selectedAssistant]);
+
+  const isSelectedPending =
+    selectedEntry && pendingEntryId === selectedEntry.id;
+
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="relative flex-1 overflow-hidden">
+        {selectedEntry ? (
+          <div className="absolute inset-0 flex h-full flex-col gap-6 overflow-hidden p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {selectedAssistant ? (
+                <Message from="assistant">
+                  <div>
+                    {selectedAssistantSources.length ? (
+                      <Sources>
+                        <SourcesTrigger
+                          count={selectedAssistantSources.length}
+                        />
+                        <SourcesContent>
+                          {selectedAssistantSources.map((source) => (
+                            <Source
+                              href={source.href}
+                              key={source.id}
+                              title={source.title}
+                            />
+                          ))}
+                        </SourcesContent>
+                      </Sources>
                     ) : null}
-                    {files.length ? (
-                      <Attachments className="mt-2" variant="inline">
-                        {files.map((attachment, index) => {
-                          const id = `${message.id}-${index}`;
-                          return (
-                            <Attachment data={{ ...attachment, id }} key={id}>
-                              <AttachmentPreview />
-                              <AttachmentInfo />
-                            </Attachment>
-                          );
-                        })}
-                      </Attachments>
+                    {selectedAssistantReasoning ? (
+                      <Reasoning duration={0}>
+                        <ReasoningTrigger />
+                        <ReasoningContent>
+                          {selectedAssistantReasoning}
+                        </ReasoningContent>
+                      </Reasoning>
                     ) : null}
-                  </MessageContent>
+                    <MessageContent>
+                      {selectedAssistantText ? (
+                        <MessageResponse>
+                          {selectedAssistantText}
+                        </MessageResponse>
+                      ) : null}
+                      {selectedAssistantFiles.length ? (
+                        <Attachments className="mt-2" variant="inline">
+                          {selectedAssistantFiles.map((attachment, index) => {
+                            const id = `${selectedAssistant.id}-${index}`;
+                            return (
+                              <Attachment data={{ ...attachment, id }} key={id}>
+                                <AttachmentPreview />
+                                <AttachmentInfo />
+                              </Attachment>
+                            );
+                          })}
+                        </Attachments>
+                      ) : null}
+                    </MessageContent>
+                  </div>
+                </Message>
+              ) : (
+                <div className="grid h-full place-items-center text-sm text-zinc-400">
+                  {isSelectedPending ? (
+                    <Generating />
+                  ) : (
+                    "Select a sketch to view its response."
+                  )}
                 </div>
-              </Message>
-            );
-          })}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
-      <div className="grid shrink-0 gap-4 pt-4">
-        <div className="w-full px-4 pb-4">
-          <PromptInput onSubmit={handleSubmit}>
-            <PromptInputHeader />
-            <PromptInputBody>
-              <PromptInputTextarea onChange={handleTextChange} value={text} />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputSubmit disabled={isSubmitDisabled} status={status} />
-            </PromptInputFooter>
-          </PromptInput>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid h-full place-items-center text-sm text-zinc-400">
+            Draw to begin.
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-3 pr-2">
+        <div className="min-w-0 flex-1">
+          {filmstripAttachments.length ? (
+            <MessageAttachments
+              attachments={filmstripAttachments}
+              pendingId={pendingEntryId}
+              selectedId={selectedUserId}
+              onSelect={setSelectedUserId}
+              onSelectScroll={handleFilmstripSelect}
+              getItemRef={getFilmstripItemRef}
+            />
+          ) : null}
         </div>
+        <Button
+          type="button"
+          size="icon-lg"
+          variant="ghost"
+          className="shrink-0"
+          onClick={handleClearHistory}
+          disabled={!filmstripAttachments.length}
+          aria-label="Clear history"
+        >
+          <Icon glyph="view-close-small" size={24} />
+        </Button>
       </div>
     </div>
   );
-};
+});
+
+Chat.displayName = "Chat";
 
 export default Chat;

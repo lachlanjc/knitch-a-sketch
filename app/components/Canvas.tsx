@@ -1,8 +1,17 @@
 "use client";
 
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import Icon from "supercons";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import getStroke from "perfect-freehand";
+import { Button } from "@/components/ui/button";
 
 type Point = [number, number, number];
 
@@ -48,187 +57,245 @@ function getSvgPathFromStroke(points: number[][]) {
 
 type CanvasProps = {
   className?: string;
+  idleMs?: number;
+  onIdle?: (version: number) => void;
+  onDrawStart?: () => void;
 };
 
 export type CanvasHandle = {
   getSnapshotDataUrl: () => Promise<string | null>;
 };
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ className }, ref) => {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [activeStrokeId, setActiveStrokeId] = useState<number | null>(null);
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(
+  ({ className, idleMs = 3000, onIdle, onDrawStart }, ref) => {
+    const svgRef = useRef<SVGSVGElement | null>(null);
+    const [strokes, setStrokes] = useState<Stroke[]>([]);
+    const [activeStrokeId, setActiveStrokeId] = useState<number | null>(null);
+    const [showClear, setShowClear] = useState(false);
+    const strokesRef = useRef<Stroke[]>([]);
+    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const drawVersionRef = useRef(0);
+    const clearRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
 
-  const getPoint = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return null;
-    }
+    useEffect(() => {
+      strokesRef.current = strokes;
+    }, [strokes]);
 
-    return [
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-      event.pressure || 0.5,
-    ] as Point;
-  }, []);
+    useEffect(() => {
+      if (clearRevealTimerRef.current) {
+        clearTimeout(clearRevealTimerRef.current);
+        clearRevealTimerRef.current = null;
+      }
 
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<SVGSVGElement>) => {
-      if (event.button !== 0) {
+      if (strokes.length === 0) {
+        setShowClear(false);
         return;
       }
+
+      clearRevealTimerRef.current = setTimeout(() => {
+        setShowClear(true);
+      }, 500);
+    }, [strokes.length]);
+
+    const clearIdleTimer = useCallback(() => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    }, []);
+
+
+    const scheduleIdle = useCallback(() => {
+      if (!onIdle || strokesRef.current.length === 0) {
+        return;
+      }
+
+      clearIdleTimer();
+      idleTimerRef.current = setTimeout(() => {
+        onIdle(drawVersionRef.current);
+      }, idleMs);
+    }, [clearIdleTimer, idleMs, onIdle]);
+
+    const getPoint = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return null;
+      }
+
+      return [
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        event.pressure || 0.5,
+      ] as Point;
+    }, []);
+
+    const handlePointerDown = useCallback(
+      (event: ReactPointerEvent<SVGSVGElement>) => {
+        if (event.button !== 0) {
+          return;
+        }
 
       const point = getPoint(event);
       if (!point) {
         return;
       }
 
-      const id = Date.now();
-      setStrokes((prev) => [...prev, { id, points: [point] }]);
-      setActiveStrokeId(id);
-      event.currentTarget.setPointerCapture(event.pointerId);
-    },
-    [getPoint],
-  );
+      onDrawStart?.();
+      clearIdleTimer();
+        const id = Date.now();
+        setStrokes((prev) => [...prev, { id, points: [point] }]);
+        setActiveStrokeId(id);
+        event.currentTarget.setPointerCapture(event.pointerId);
+      },
+      [clearIdleTimer, getPoint],
+    );
 
-  const handlePointerMove = useCallback(
-    (event: ReactPointerEvent<SVGSVGElement>) => {
-      if (activeStrokeId === null) {
-        return;
+    const handlePointerMove = useCallback(
+      (event: ReactPointerEvent<SVGSVGElement>) => {
+        if (activeStrokeId === null) {
+          return;
+        }
+
+        const point = getPoint(event);
+        if (!point) {
+          return;
+        }
+
+        clearIdleTimer();
+        setStrokes((prev) =>
+          prev.map((stroke) =>
+            stroke.id === activeStrokeId
+              ? { ...stroke, points: [...stroke.points, point] }
+              : stroke,
+          ),
+        );
+      },
+      [activeStrokeId, clearIdleTimer, getPoint],
+    );
+
+    const endStroke = useCallback(() => {
+      if (activeStrokeId !== null) {
+        drawVersionRef.current += 1;
+      }
+      setActiveStrokeId(null);
+      scheduleIdle();
+    }, [activeStrokeId, scheduleIdle]);
+
+    const handleClear = useCallback(() => {
+      setStrokes([]);
+      setActiveStrokeId(null);
+      clearIdleTimer();
+    }, [clearIdleTimer]);
+
+    const getSnapshotDataUrl = useCallback(async () => {
+      const svg = svgRef.current;
+      if (!svg) {
+        return null;
       }
 
-      const point = getPoint(event);
-      if (!point) {
-        return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        return null;
       }
 
-      setStrokes((prev) =>
-        prev.map((stroke) =>
-          stroke.id === activeStrokeId
-            ? { ...stroke, points: [...stroke.points, point] }
-            : stroke,
-        ),
-      );
-    },
-    [activeStrokeId, getPoint],
-  );
+      const cloned = svg.cloneNode(true) as SVGSVGElement;
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height));
 
-  const endStroke = useCallback(() => {
-    setActiveStrokeId(null);
-  }, []);
+      cloned.setAttribute("width", `${width}`);
+      cloned.setAttribute("height", `${height}`);
+      if (!cloned.getAttribute("xmlns")) {
+        cloned.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      }
+      if (!cloned.getAttribute("viewBox")) {
+        cloned.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      }
 
-  const handleClear = useCallback(() => {
-    setStrokes([]);
-    setActiveStrokeId(null);
-  }, []);
+      const serializer = new XMLSerializer();
+      const svgMarkup = serializer.serializeToString(cloned);
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
 
-  const getSnapshotDataUrl = useCallback(async () => {
-    const svg = svgRef.current;
-    if (!svg) {
-      return null;
-    }
+      const image = new Image();
+      image.decoding = "async";
+      image.src = svgUrl;
 
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) {
-      return null;
-    }
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Failed to load SVG snapshot."));
+      });
 
-    const cloned = svg.cloneNode(true) as SVGSVGElement;
-    const width = Math.max(1, Math.round(rect.width));
-    const height = Math.max(1, Math.round(rect.height));
+      const dpr = window.devicePixelRatio || 1;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return null;
+      }
 
-    cloned.setAttribute("width", `${width}`);
-    cloned.setAttribute("height", `${height}`);
-    if (!cloned.getAttribute("xmlns")) {
-      cloned.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    }
-    if (!cloned.getAttribute("viewBox")) {
-      cloned.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    }
+      ctx.scale(dpr, dpr);
+      const background = svg.parentElement
+        ? getComputedStyle(svg.parentElement).backgroundColor
+        : "rgba(0, 0, 0, 0)";
+      if (background !== "rgba(0, 0, 0, 0)") {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.drawImage(image, 0, 0, width, height);
 
-    const serializer = new XMLSerializer();
-    const svgMarkup = serializer.serializeToString(cloned);
-    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+      return canvas.toDataURL("image/png");
+    }, []);
 
-    const image = new Image();
-    image.decoding = "async";
-    image.src = svgUrl;
+    useImperativeHandle(
+      ref,
+      () => ({
+        getSnapshotDataUrl,
+      }),
+      [getSnapshotDataUrl],
+    );
 
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Failed to load SVG snapshot."));
-    });
-
-    const dpr = window.devicePixelRatio || 1;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return null;
-    }
-
-    ctx.scale(dpr, dpr);
-    const background = svg.parentElement
-      ? getComputedStyle(svg.parentElement).backgroundColor
-      : "rgba(0, 0, 0, 0)";
-    if (background !== "rgba(0, 0, 0, 0)") {
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, width, height);
-    }
-    ctx.drawImage(image, 0, 0, width, height);
-
-    return canvas.toDataURL("image/png");
-  }, []);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      getSnapshotDataUrl,
-    }),
-    [getSnapshotDataUrl],
-  );
-
-  return (
-    <div
-      className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
-    >
-      <div className="pointer-events-none absolute left-6 top-6 z-10 max-w-xs text-sm uppercase tracking-[0.25em] text-zinc-400">
-        Knitspace
-      </div>
-      <div className="pointer-events-none absolute left-6 bottom-6 z-10 max-w-xs text-xs text-zinc-400">
-        Draw with mouse or touch. Double tap to clear.
-      </div>
-      <button
-        type="button"
-        onClick={handleClear}
-        className="absolute right-6 top-6 z-10 rounded-full border border-zinc-700 bg-zinc-900/80 px-4 py-2 text-xs uppercase tracking-[0.2em] text-zinc-200 backdrop-blur"
+    return (
+      <div
+        className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
       >
-        Clear
-      </button>
-      <svg
-        ref={svgRef}
-        className="h-full w-full touch-none"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endStroke}
-        onPointerLeave={endStroke}
-        onPointerCancel={endStroke}
-        onDoubleClick={handleClear}
-        role="img"
-        aria-label="Drawing canvas"
-      >
-        {strokes.map((stroke) => {
-          const strokePoints = getStroke(stroke.points, STROKE_OPTIONS);
-          const pathData = getSvgPathFromStroke(strokePoints);
-          return (
-            <path key={stroke.id} d={pathData} fill="black" stroke="none" />
-          );
-        })}
-      </svg>
-    </div>
-  );
-});
+        <Button
+          type="button"
+          size="icon-lg"
+          variant="ghost"
+          onClick={handleClear}
+          className={`absolute right-0 top-8 z-10 transition-opacity duration-500 ${
+            showClear ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          title="Clear canvas"
+        >
+          <Icon glyph="view-reload" size={16} style={{ scale: 2 }} />
+        </Button>
+        <svg
+          ref={svgRef}
+          className="h-full w-full touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endStroke}
+          onPointerLeave={endStroke}
+          onPointerCancel={endStroke}
+          onDoubleClick={handleClear}
+          role="img"
+          aria-label="Drawing canvas"
+        >
+          {strokes.map((stroke) => {
+            const strokePoints = getStroke(stroke.points, STROKE_OPTIONS);
+            const pathData = getSvgPathFromStroke(strokePoints);
+            return (
+              <path key={stroke.id} d={pathData} fill="black" stroke="none" />
+            );
+          })}
+        </svg>
+      </div>
+    );
+  },
+);
 
 Canvas.displayName = "Canvas";
 

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     model: "google/gemini-3-flash",
     messages: await convertToModelMessages(messages),
     system:
-      "You are an expert knitter. People send you drawings of things they want to knit, you write a pattern for the simplest way to knit that shape. Respond ONLY with the knitting pattern, no explanations or additional text.",
+      "You are an expert knitter. People send you drawings of things they want to knit, you write a pattern for the simplest way to knit that shape, flat knitting only. Respond ONLY with the knitting pattern, no explanations or additional text. Format steps in a bulleted list.",
   });
 
   // send sources and reasoning back to the client
