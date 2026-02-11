@@ -106,7 +106,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
       }
     }, []);
 
-
     const scheduleIdle = useCallback(() => {
       if (!onIdle || strokesRef.current.length === 0) {
         return;
@@ -137,13 +136,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
           return;
         }
 
-      const point = getPoint(event);
-      if (!point) {
-        return;
-      }
+        const point = getPoint(event);
+        if (!point) {
+          return;
+        }
 
-      onDrawStart?.();
-      clearIdleTimer();
+        onDrawStart?.();
+        clearIdleTimer();
         const id = Date.now();
         setStrokes((prev) => [...prev, { id, points: [point] }]);
         setActiveStrokeId(id);
@@ -265,7 +264,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(
           size="icon-lg"
           variant="ghost"
           onClick={handleClear}
-          className={`absolute right-0 top-8 z-10 transition-opacity duration-500 ${
+          className={`absolute left-6 top-6 z-10 transition-opacity duration-500 ${
             showClear ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           title="Clear canvas"

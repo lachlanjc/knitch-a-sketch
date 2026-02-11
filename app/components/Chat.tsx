@@ -10,6 +10,7 @@ import {
   Attachments,
 } from "@/components/ai-elements/attachments";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Message,
   MessageContent,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ai-elements/sources";
 import { Spinner } from "@/components/ui/spinner";
 import Generating from "./Generating";
+import YarnIcon from "./YarnIcon";
 import { useChat } from "@ai-sdk/react";
 import Icon from "supercons";
 import {
@@ -53,6 +55,18 @@ type UserEntry = {
   id: string;
   file: FileUIPart;
   messageIndex: number;
+};
+
+type Piece = {
+  name: string;
+  quanity?: number;
+  yarn: string;
+  yarnColor: string;
+  instructions: string[];
+};
+
+type Pattern = {
+  pieces: Piece[];
 };
 
 interface MessageProps {
@@ -358,6 +372,21 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
     return getTextFromParts(selectedAssistant.parts);
   }, [getTextFromParts, selectedAssistant]);
 
+  const parsedPattern = useMemo<Pattern | null>(() => {
+    if (!selectedAssistantText) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(selectedAssistantText) as Pattern;
+      if (!parsed || !Array.isArray(parsed.pieces)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [selectedAssistantText]);
+
   const selectedAssistantSources = useMemo(() => {
     if (!selectedAssistant) {
       return [];
@@ -382,104 +411,104 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
   const isSelectedPending =
     selectedEntry && pendingEntryId === selectedEntry.id;
 
-
   return (
-    <div className="flex h-full flex-col">
-      <div className="relative flex-1 overflow-hidden">
+    <div className="">
+      <div className="flex-1 ">
         {selectedEntry ? (
-          <div className="absolute inset-0 flex h-full flex-col gap-6 overflow-hidden p-6">
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {selectedAssistant ? (
-                <Message from="assistant">
-                  <div>
-                    {selectedAssistantSources.length ? (
-                      <Sources>
-                        <SourcesTrigger
-                          count={selectedAssistantSources.length}
-                        />
-                        <SourcesContent>
-                          {selectedAssistantSources.map((source) => (
-                            <Source
-                              href={source.href}
-                              key={source.id}
-                              title={source.title}
+          selectedAssistant ? (
+            <div>
+              {parsedPattern ? (
+                <div className="flex flex-col h-full gap-6 overflow-y-auto snap-y snap-mandatory px-6 py-6 -my-6 max-h-[75vb]">
+                  {parsedPattern.pieces.map((piece, index) => {
+                    const quantity =
+                      typeof piece.quanity === "number" ? piece.quanity : 1;
+                    return (
+                      <section
+                        key={`${piece.name}-${index}`}
+                        className="rounded-2xl snap-start border border-zinc-200 bg-white p-4 text-zinc-900 shadow-xl"
+                      >
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-xl font-semibold">
+                            {piece.name}
+                          </h3>
+                          {quantity !== 1 ? (
+                            <Badge variant="outline">x{quantity}</Badge>
+                          ) : null}
+                        </div>
+                        <div className="-mb-1 -ml-0.5 flex flex-wrap items-center gap-3 text-xs text-zinc-600">
+                          <span className="flex items-center gap-1">
+                            <YarnIcon
+                              className="size-6"
+                              color={piece.yarnColor}
                             />
+                            {piece.yarn}
+                          </span>
+                        </div>
+                        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-zinc-800">
+                          {piece.instructions.map((step, stepIndex) => (
+                            <li key={`${piece.name}-${stepIndex}`}>{step}</li>
                           ))}
-                        </SourcesContent>
-                      </Sources>
-                    ) : null}
-                    {selectedAssistantReasoning ? (
-                      <Reasoning duration={0}>
-                        <ReasoningTrigger />
-                        <ReasoningContent>
-                          {selectedAssistantReasoning}
-                        </ReasoningContent>
-                      </Reasoning>
-                    ) : null}
-                    <MessageContent>
-                      {selectedAssistantText ? (
-                        <MessageResponse>
-                          {selectedAssistantText}
-                        </MessageResponse>
-                      ) : null}
-                      {selectedAssistantFiles.length ? (
-                        <Attachments className="mt-2" variant="inline">
-                          {selectedAssistantFiles.map((attachment, index) => {
-                            const id = `${selectedAssistant.id}-${index}`;
-                            return (
-                              <Attachment data={{ ...attachment, id }} key={id}>
-                                <AttachmentPreview />
-                                <AttachmentInfo />
-                              </Attachment>
-                            );
-                          })}
-                        </Attachments>
-                      ) : null}
-                    </MessageContent>
-                  </div>
-                </Message>
-              ) : (
-                <div className="grid h-full place-items-center text-sm text-zinc-400">
-                  {isSelectedPending ? (
-                    <Generating />
-                  ) : (
-                    "Select a sketch to view its response."
-                  )}
+                        </ul>
+                      </section>
+                    );
+                  })}
                 </div>
+              ) : null}
+              {selectedAssistantFiles.length ? (
+                <Attachments className="mt-2" variant="inline">
+                  {selectedAssistantFiles.map((attachment, index) => {
+                    const id = `${selectedAssistant.id}-${index}`;
+                    return (
+                      <Attachment data={{ ...attachment, id }} key={id}>
+                        <AttachmentPreview />
+                        <AttachmentInfo />
+                      </Attachment>
+                    );
+                  })}
+                </Attachments>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid min-h-[40vh] place-items-center text-sm text-zinc-400">
+              {isSelectedPending ? (
+                <Generating />
+              ) : (
+                "Select a sketch to view its response."
               )}
             </div>
-          </div>
+          )
         ) : (
-          <div className="grid h-full place-items-center text-sm text-zinc-400">
+          <div className="grid min-h-[40vh] place-items-center text-sm text-zinc-400">
             Draw to begin.
           </div>
         )}
       </div>
-      <div className="flex items-center gap-3 pr-2">
-        <div className="min-w-0 flex-1">
-          {filmstripAttachments.length ? (
-            <MessageAttachments
-              attachments={filmstripAttachments}
-              pendingId={pendingEntryId}
-              selectedId={selectedUserId}
-              onSelect={setSelectedUserId}
-              onSelectScroll={handleFilmstripSelect}
-              getItemRef={getFilmstripItemRef}
-            />
-          ) : null}
+      {filmstripAttachments.length ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center">
+          <div className="pointer-events-auto flex w-full max-w-5xl items-center gap-3 px-4">
+            <div className="min-w-0 flex-1">
+              <MessageAttachments
+                attachments={filmstripAttachments}
+                pendingId={pendingEntryId}
+                selectedId={selectedUserId}
+                onSelect={setSelectedUserId}
+                onSelectScroll={handleFilmstripSelect}
+                getItemRef={getFilmstripItemRef}
+              />
+            </div>
+            <Button
+              type="button"
+              size="icon-lg"
+              variant="ghost"
+              className="shrink-0 bg-white/90 shadow-lg ring-1 ring-black/5 backdrop-blur"
+              onClick={handleClearHistory}
+              aria-label="Clear history"
+            >
+              <Icon glyph="view-close-small" size={24} />
+            </Button>
+          </div>
         </div>
-        <Button
-          type="button"
-          size="icon-lg"
-          variant="ghost"
-          className="shrink-0"
-          onClick={handleClearHistory}
-          disabled={!filmstripAttachments.length}
-          aria-label="Clear history"
-        >
-          <Icon glyph="view-close-small" size={24} />
-        </Button>
-      </div>
+      ) : null}
     </div>
   );
 });

@@ -3,7 +3,6 @@
 import { useCallback, useRef } from "react";
 import Canvas, { type CanvasHandle } from "./Canvas";
 import Chat, { type ChatHandle } from "./Chat";
-import { Card, CardContent } from "@/components/ui/card";
 
 export default function Project() {
   const canvasRef = useRef<CanvasHandle | null>(null);
@@ -38,16 +37,12 @@ export default function Project() {
         onDrawStart={() => chatRef.current?.cancelPending()}
       />
       <section className="p-6 lg:p-10">
-        <Card className="h-full shadow-2xl py-0">
-          <CardContent className="flex h-full flex-col px-0">
-            <Chat
-              ref={chatRef}
-              getCanvasSnapshot={async () =>
-                canvasRef.current?.getSnapshotDataUrl() ?? null
-              }
-            />
-          </CardContent>
-        </Card>
+        <Chat
+          ref={chatRef}
+          getCanvasSnapshot={async () =>
+            canvasRef.current?.getSnapshotDataUrl() ?? null
+          }
+        />
       </section>
     </main>
   );
