@@ -1,4 +1,5 @@
-import type { UIMessage} from "ai";
+import type { UIMessage } from "ai";
+
 import { streamText, convertToModelMessages, Output } from "ai";
 import { z } from "zod";
 
@@ -39,9 +40,9 @@ export async function POST(req: Request) {
     messages: await convertToModelMessages(messages),
     model: "google/gemini-3-flash",
     output: Output.object({
-      schema: patternSchema,
-      name: "knit_pattern",
       description: "Structured knitting pattern for a drawing.",
+      name: "knit_pattern",
+      schema: patternSchema,
     }),
     system:
       "You are an expert knitter. People send you drawings of things they want to knit. Return a structured object that matches the schema, with an array of pieces (oftentimes only 1).",

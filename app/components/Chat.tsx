@@ -174,7 +174,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
         stop();
         setMessages((prev) => {
           const lastUserIndex = [...prev]
-            .reverse()
+            .toReversed()
             .findIndex((message) => message.role === "user");
           if (lastUserIndex === -1) {
             return prev;
@@ -239,43 +239,63 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
     }
   }, [messages]);
 
-  const getTextFromParts = useCallback((parts: UIMessagePart[]) => parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join(""), []);
+  const getTextFromParts = useCallback(
+    (parts: UIMessagePart[]) =>
+      parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join(""),
+    []
+  );
 
-  const getSourcesFromParts = useCallback((parts: UIMessagePart[]) => parts
-      .filter((part) => part.type === "source-url")
-      .map((part) => ({
-        href: part.url,
-        title: part.title ?? part.url,
-        id: part.sourceId,
-      })), []);
+  const getSourcesFromParts = useCallback(
+    (parts: UIMessagePart[]) =>
+      parts
+        .filter((part) => part.type === "source-url")
+        .map((part) => ({
+          href: part.url,
+          id: part.sourceId,
+          title: part.title ?? part.url,
+        })),
+    []
+  );
 
-  const getReasoningFromParts = useCallback((parts: UIMessagePart[]) => parts
-      .filter((part) => part.type === "reasoning")
-      .map((part) => part.text)
-      .join("\n"), []);
+  const getReasoningFromParts = useCallback(
+    (parts: UIMessagePart[]) =>
+      parts
+        .filter((part) => part.type === "reasoning")
+        .map((part) => part.text)
+        .join("\n"),
+    []
+  );
 
-  const getFileParts = useCallback((parts: UIMessagePart[]) => parts.filter((part): part is FileUIPart => part.type === "file"), []);
+  const getFileParts = useCallback(
+    (parts: UIMessagePart[]) =>
+      parts.filter((part): part is FileUIPart => part.type === "file"),
+    []
+  );
 
-  const userEntries = useMemo<UserEntry[]>(() => messages
-      .map((message: UIMessage, index) => {
-        if (message.role !== "user") {
-          return null;
-        }
-        const files = getFileParts(message.parts);
-        const firstFile = files[0];
-        if (!firstFile) {
-          return null;
-        }
-        return {
-          id: message.id,
-          file: firstFile,
-          messageIndex: index,
-        };
-      })
-      .filter((entry): entry is UserEntry => Boolean(entry)), [getFileParts, messages]);
+  const userEntries = useMemo<UserEntry[]>(
+    () =>
+      messages
+        .map((message: UIMessage, index) => {
+          if (message.role !== "user") {
+            return null;
+          }
+          const files = getFileParts(message.parts);
+          const firstFile = files[0];
+          if (!firstFile) {
+            return null;
+          }
+          return {
+            file: firstFile,
+            id: message.id,
+            messageIndex: index,
+          };
+        })
+        .filter((entry): entry is UserEntry => Boolean(entry)),
+    [getFileParts, messages]
+  );
 
   const filmstripAttachments = useMemo(
     () =>
@@ -343,7 +363,10 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({ getCanvasSnapshot }, ref) => {
     [messages]
   );
 
-  const selectedAssistant = useMemo(() => getAssistantMessageForEntry(selectedEntry), [getAssistantMessageForEntry, selectedEntry]);
+  const selectedAssistant = useMemo(
+    () => getAssistantMessageForEntry(selectedEntry),
+    [getAssistantMessageForEntry, selectedEntry]
+  );
 
   const pendingEntryId = useMemo(() => {
     for (let i = userEntries.length - 1; i >= 0; i -= 1) {

@@ -25,15 +25,15 @@ interface Stroke {
 const STROKE_OPTIONS = {
   easing: (t: number) => t,
   end: {
-    taper: 4,
     cap: true,
+    taper: 4,
   },
   simulatePressure: true,
   size: 8,
   smoothing: 0.6,
   start: {
-    taper: 2,
     cap: true,
+    taper: 2,
   },
   streamline: 0.5,
   thinning: 0.6,
