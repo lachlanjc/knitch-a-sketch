@@ -26,10 +26,16 @@ const schema = defineSchema(
   }),
   {
     promptTemplate: ({ catalog, options, formatZodType }) => {
+      const catalogData = catalog as {
+        components?: Record<
+          string,
+          { props?: z.ZodTypeAny; description?: string }
+        >;
+      };
       const system =
         options?.system ?? "You are a UI generator that outputs JSON.";
       const rules = options?.customRules ?? [];
-      const components = Object.entries(catalog.components ?? {}).map(
+      const components = Object.entries(catalogData.components ?? {}).map(
         ([name, def]) => {
           const propsSchema = def.props
             ? formatZodType(def.props)

@@ -1,3 +1,5 @@
+import type { Spec, UIElement } from "@json-render/core";
+
 export interface TreeElement {
   type: string;
   props: Record<string, unknown>;
@@ -12,27 +14,12 @@ export interface TreeSpec {
   state?: Record<string, unknown>;
 }
 
-export interface FlatElement {
-  type: string;
-  props: Record<string, unknown>;
-  children?: string[];
-  visible?: unknown;
-  repeat?: unknown;
-  on?: unknown;
-}
-
-export interface FlatSpec {
-  root: string;
-  elements: Record<string, FlatElement>;
-  state?: Record<string, unknown>;
-}
-
-export const treeToFlatSpec = (spec: TreeSpec | null): FlatSpec | null => {
+export const treeToFlatSpec = (spec: TreeSpec | null): Spec | null => {
   if (!spec?.root) {
     return null;
   }
 
-  const elements: Record<string, FlatElement> = {};
+  const elements: Record<string, UIElement> = {};
   let counter = 0;
 
   const walk = (element: TreeElement): string => {
@@ -49,7 +36,7 @@ export const treeToFlatSpec = (spec: TreeSpec | null): FlatSpec | null => {
       visible: element.visible,
       repeat: element.repeat,
       on: element.on,
-    };
+    } as UIElement;
 
     return key;
   };

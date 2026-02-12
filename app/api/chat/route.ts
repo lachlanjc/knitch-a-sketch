@@ -21,6 +21,8 @@ export async function POST(req: Request) {
     "[api/chat] imageDataUrl length:",
     context?.imageDataUrl ? context.imageDataUrl.length : 0
   );
+  const startTime = Date.now();
+  console.log("[api/chat] start", new Date(startTime).toISOString());
 
   const content: UserContent =
     context?.imageDataUrl
