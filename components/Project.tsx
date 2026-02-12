@@ -2,16 +2,17 @@
 
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
-import { useChat } from "@ai-sdk/react";
+import { useUIStream } from "@json-render/react";
+import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ProjectContextValue } from "./ProjectContext";
+import type { ProjectContextValue, SketchEntry } from "./ProjectContext";
 
 import Canvas from "./Canvas";
 import Chat from "./Chat";
 import { ProjectContext, useProjectContext } from "./ProjectContext";
 
-const STORAGE_KEY = "knitspace.chat.history";
+const STORAGE_KEY = "knitspace.sketch.history.v1";
 
 type CanvasProps = ComponentPropsWithoutRef<typeof Canvas>;
 type ChatProps = ComponentPropsWithoutRef<typeof Chat>;
@@ -60,63 +61,95 @@ const ProjectPanel = ({ children }: ProjectPanelProps) => (
 const ProjectChat = (props: ProjectChatProps) => <Chat {...props} />;
 
 const Project = ({ children }: PropsWithChildren) => {
-  const { messages, sendMessage, setMessages, status, stop } = useChat();
   const hasLoadedHistoryRef = useRef(false);
   const lastSubmittedVersionRef = useRef<number | null>(null);
-  const submittingRef = useRef(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const activeEntryIdRef = useRef<string | null>(null);
+  const [entries, setEntries] = useState<SketchEntry[]>([]);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+
+  const { spec, send, clear } = useUIStream({
+    api: "/api/chat",
+    onComplete: (finalSpec) => {
+      console.log("[ui] spec complete", finalSpec);
+      const entryId = activeEntryIdRef.current;
+      if (!entryId) {
+        return;
+      }
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === entryId
+            ? { ...entry, spec: finalSpec, status: "ready" }
+            : entry
+        )
+      );
+      setSelectedEntryId(entryId);
+      activeEntryIdRef.current = null;
+    },
+    onError: () => {
+      console.log("[ui] spec error");
+      const entryId = activeEntryIdRef.current;
+      if (!entryId) {
+        return;
+      }
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === entryId ? { ...entry, status: "error" } : entry
+        )
+      );
+      activeEntryIdRef.current = null;
+    },
+  });
+
+  const cancelPending = useCallback(() => {
+    const entryId = activeEntryIdRef.current;
+    if (!entryId) {
+      return;
+    }
+    activeEntryIdRef.current = null;
+    clear();
+    setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+    setSelectedEntryId((prev) => (prev === entryId ? null : prev));
+  }, [clear]);
 
   const submitSnapshot = useCallback(
     async (version: number, dataUrl: string) => {
-      if (submittingRef.current) {
-        return;
-      }
-
       if (lastSubmittedVersionRef.current === version) {
         return;
       }
 
-      submittingRef.current = true;
-      try {
-        await sendMessage({
-          files: [
-            {
-              filename: `canvas-${Date.now()}.png`,
-              mediaType: "image/png",
-              type: "file",
-              url: dataUrl,
-            },
-          ],
-        });
-        lastSubmittedVersionRef.current = version;
-      } finally {
-        submittingRef.current = false;
+      if (activeEntryIdRef.current) {
+        cancelPending();
       }
+
+      const entryId = nanoid();
+      activeEntryIdRef.current = entryId;
+      lastSubmittedVersionRef.current = version;
+
+      setEntries((prev) => [
+        ...prev,
+        {
+          id: entryId,
+          imageUrl: dataUrl,
+          spec: null,
+          status: "pending",
+          createdAt: Date.now(),
+        },
+      ]);
+      setSelectedEntryId((prev) => (prev ? prev : entryId));
+
+      void send("Generate a knitting pattern UI for this sketch.", {
+        imageDataUrl: dataUrl,
+      });
     },
-    [sendMessage]
+    [cancelPending, send]
   );
 
-  const cancelPending = useCallback(() => {
-    if (status === "ready") {
-      return;
-    }
-    stop();
-    setMessages((prev) => {
-      const lastUserIndex = [...prev]
-        .toReversed()
-        .findIndex((message) => message.role === "user");
-      if (lastUserIndex === -1) {
-        return prev;
-      }
-      const index = prev.length - 1 - lastUserIndex;
-      return prev.slice(0, index);
-    });
-  }, [setMessages, status, stop]);
-
   const clearHistory = useCallback(() => {
-    setMessages([]);
+    setEntries([]);
     lastSubmittedVersionRef.current = null;
-    setSelectedUserId(null);
+    activeEntryIdRef.current = null;
+    setSelectedEntryId(null);
+    clear();
     if (typeof window === "undefined") {
       return;
     }
@@ -125,7 +158,7 @@ const Project = ({ children }: PropsWithChildren) => {
     } catch {
       // Ignore storage errors
     }
-  }, [setMessages]);
+  }, [clear]);
 
   useEffect(() => {
     if (hasLoadedHistoryRef.current) {
@@ -142,14 +175,28 @@ const Project = ({ children }: PropsWithChildren) => {
       if (!raw) {
         return;
       }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setMessages(parsed);
+      const parsed = JSON.parse(raw) as unknown;
+      const isEntryArray =
+        Array.isArray(parsed) &&
+        parsed.every(
+          (entry) =>
+            entry &&
+            typeof entry === "object" &&
+            typeof (entry as SketchEntry).id === "string" &&
+            typeof (entry as SketchEntry).imageUrl === "string"
+        );
+      if (isEntryArray) {
+        const entriesFromStorage = parsed as SketchEntry[];
+        setEntries(entriesFromStorage);
+        const lastEntry = entriesFromStorage[entriesFromStorage.length - 1];
+        if (lastEntry?.id) {
+          setSelectedEntryId(lastEntry.id);
+        }
       }
     } catch {
       // Ignore corrupted history
     }
-  }, [setMessages]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -157,37 +204,42 @@ const Project = ({ children }: PropsWithChildren) => {
     }
 
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     } catch {
       // Ignore storage write failures
     }
-  }, [messages]);
+  }, [entries]);
+
+  useEffect(() => {
+    const entryId = activeEntryIdRef.current;
+    if (!entryId || !spec) {
+      return;
+    }
+    console.log("[ui] spec patch", spec);
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, spec, status: "pending" } : entry
+      )
+    );
+  }, [spec]);
 
   const contextValue = useMemo<ProjectContextValue>(
     () => ({
       actions: {
         cancelPending,
         clearHistory,
-        setSelectedUserId,
+        setSelectedEntryId,
         submitSnapshot,
       },
       meta: {
         storageKey: STORAGE_KEY,
       },
       state: {
-        messages,
-        selectedUserId,
-        status,
+        entries,
+        selectedEntryId,
       },
     }),
-    [
-      cancelPending,
-      clearHistory,
-      messages,
-      selectedUserId,
-      status,
-      submitSnapshot,
-    ]
+    [cancelPending, clearHistory, entries, selectedEntryId, submitSnapshot]
   );
 
   return (

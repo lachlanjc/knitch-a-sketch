@@ -1,26 +1,28 @@
 "use client";
 
-import type { FileUIPart, UIMessage } from "ai";
-import type { ForwardedRef, HTMLAttributes, ReactNode } from "react";
+import type { ForwardedRef, HTMLAttributes } from "react";
 
 import Image from "next/image";
 import { forwardRef, useCallback, useEffect, useMemo, useRef } from "react";
 import Icon from "supercons";
 
 import { Button } from "@/components/ui/button";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 import { Spinner } from "@/components/ui/spinner";
 
 import { useProjectContext } from "./ProjectContext";
 
-interface UserEntry {
+interface SketchAttachment {
   id: string;
-  file: FileUIPart;
-  messageIndex: number;
+  imageUrl: string;
 }
 
 interface MessageProps {
-  attachments: (FileUIPart & { id: string })[];
-  onRemove?: (id: string) => void;
+  attachments: SketchAttachment[];
   selectedId?: string | null;
   pendingId?: string | null;
   onSelect?: (id: string) => void;
@@ -28,41 +30,19 @@ interface MessageProps {
   getItemRef?: (id: string) => (node: HTMLDivElement | null) => void;
 }
 
-type AttachmentData = FileUIPart & { id: string };
-
-const getFileParts = (parts: UIMessage["parts"]) =>
-  parts.filter((part): part is FileUIPart => part.type === "file");
-
-const Attachments = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => (
-  <div className={className} role="list">
-    {children}
-  </div>
-);
-
 const Attachment = forwardRef(
   (
     {
       data,
       className,
       children,
-      onRemove,
       ...props
-    }: HTMLAttributes<HTMLDivElement> & {
-      data: AttachmentData;
-      onRemove?: () => void;
-    },
+    }: HTMLAttributes<HTMLDivElement> & { data: SketchAttachment },
     ref: ForwardedRef<HTMLDivElement>
   ) => (
     <div
       className={`group relative size-24 overflow-hidden rounded-lg ${className ?? ""}`}
       data-attachment-id={data.id}
-      data-has-remove={onRemove ? "true" : "false"}
       ref={ref}
       {...props}
     >
@@ -71,151 +51,96 @@ const Attachment = forwardRef(
   )
 );
 
-const AttachmentPreview = ({ data }: { data: AttachmentData }) => {
-  if (data.type !== "file" || !data.url) {
-    return (
-      <div className="flex size-full items-center justify-center bg-zinc-100 text-xs text-zinc-500">
-        File
-      </div>
-    );
-  }
-
-  return (
-    <Image
-      alt={data.filename ?? "Sketch"}
-      className="size-full object-cover"
-      height={96}
-      src={data.url}
-      width={96}
-    />
-  );
-};
-
-const AttachmentRemove = ({ onRemove }: { onRemove?: () => void }) => {
-  if (!onRemove) {
-    return null;
-  }
-
-  return (
-    <Button
-      aria-label="Remove"
-      className="absolute right-2 top-2 size-6 rounded-full bg-white/80 p-0 opacity-0 transition-opacity group-hover:opacity-100"
-      onClick={(event) => {
-        event.stopPropagation();
-        onRemove();
-      }}
-      type="button"
-      variant="ghost"
-    >
-      x<span className="sr-only">Remove</span>
-    </Button>
-  );
-};
+const AttachmentPreview = ({ data }: { data: SketchAttachment }) => (
+  <Image
+    alt="Sketch"
+    className="size-full object-cover"
+    height={96}
+    src={data.imageUrl}
+    unoptimized
+    width={96}
+  />
+);
 
 const MessageAttachments = ({
   attachments,
-  onRemove,
   selectedId,
   pendingId,
   onSelect,
   onSelectScroll,
   getItemRef,
 }: MessageProps) => (
-  <Attachments className="flex w-full flex-nowrap gap-3 overflow-x-auto p-2 -ml-2 snap-x snap-mandatory">
-    {attachments.map((file) => {
-      const isSelected = file.id === selectedId;
-      const isPending = file.id === pendingId;
-      return (
-        <Attachment
-          key={file.id}
-          data={file}
-          onRemove={onRemove ? () => onRemove(file.id) : undefined}
-          className={`shrink-0 cursor-pointer snap-start border transition ${
-            isSelected
-              ? "border-black ring-4 ring-black"
-              : "border-transparent hover:border-zinc-600"
-          }`}
-          onClick={
-            onSelect || onSelectScroll
-              ? () => {
-                  onSelect?.(file.id);
-                  onSelectScroll?.(file.id);
-                }
-              : undefined
-          }
-          ref={getItemRef ? getItemRef(file.id) : undefined}
-        >
-          <AttachmentPreview data={file} />
-          <AttachmentRemove
-            onRemove={onRemove ? () => onRemove(file.id) : undefined}
-          />
-          {isPending ? (
-            <div className="absolute inset-0 grid place-items-center bg-zinc-950/60">
-              <Spinner className="size-4" />
-            </div>
-          ) : null}
-        </Attachment>
-      );
-    })}
-  </Attachments>
+  <Carousel
+    orientation="horizontal"
+    className="w-full"
+    opts={{ align: "start", dragFree: true }}
+  >
+    <CarouselContent className="px-2 -ml-2 gap-3 snap-x snap-mandatory">
+      {attachments.map((file) => {
+        const isSelected = file.id === selectedId;
+        const isPending = file.id === pendingId;
+        return (
+          <CarouselItem className="basis-auto snap-start" key={file.id}>
+            <Attachment
+              data={file}
+              className={`shrink-0 cursor-pointer border transition ${
+                isSelected
+                  ? "border-black ring-4 ring-black"
+                  : "border-transparent hover:border-zinc-600"
+              }`}
+              onClick={
+                onSelect || onSelectScroll
+                  ? () => {
+                      onSelect?.(file.id);
+                      onSelectScroll?.(file.id);
+                    }
+                  : undefined
+              }
+              ref={getItemRef ? getItemRef(file.id) : undefined}
+            >
+              <AttachmentPreview data={file} />
+              {isPending ? (
+                <div className="absolute inset-0 grid place-items-center bg-zinc-950/60">
+                  <Spinner className="size-4" />
+                </div>
+              ) : null}
+            </Attachment>
+          </CarouselItem>
+        );
+      })}
+    </CarouselContent>
+  </Carousel>
 );
 
 export default function Sketchstrip() {
   const {
-    state: { messages, selectedUserId },
-    actions: { clearHistory, setSelectedUserId },
+    state: { entries, selectedEntryId },
+    actions: { clearHistory, setSelectedEntryId },
   } = useProjectContext();
-  const lastUserIdRef = useRef<string | null>(null);
   const filmstripItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const userEntries = useMemo<UserEntry[]>(
+  const filmstripAttachments = useMemo<SketchAttachment[]>(
     () =>
-      messages
-        .map((message: UIMessage, index) => {
-          if (message.role !== "user") {
-            return null;
-          }
-          const files = getFileParts(message.parts);
-          const firstFile = files[0];
-          if (!firstFile) {
-            return null;
-          }
-          return {
-            file: firstFile,
-            id: message.id,
-            messageIndex: index,
-          };
-        })
-        .filter((entry): entry is UserEntry => Boolean(entry)),
-    [messages]
-  );
-
-  const filmstripAttachments = useMemo(
-    () =>
-      userEntries.map((entry) => ({
-        ...entry.file,
+      entries.map((entry) => ({
         id: entry.id,
+        imageUrl: entry.imageUrl,
       })),
-    [userEntries]
+    [entries]
   );
 
   useEffect(() => {
-    if (!userEntries.length) {
-      if (selectedUserId !== null) {
-        setSelectedUserId(null);
-      }
-      lastUserIdRef.current = null;
+    if (!entries.length && selectedEntryId !== null) {
+      setSelectedEntryId(null);
+    }
+  }, [entries.length, selectedEntryId, setSelectedEntryId]);
+
+  useEffect(() => {
+    if (!selectedEntryId) {
       return;
     }
-
-    const latestId = userEntries.at(-1)?.id ?? null;
-    if (latestId && latestId !== lastUserIdRef.current) {
-      lastUserIdRef.current = latestId;
-      setSelectedUserId(latestId);
-      const node = filmstripItemRefs.current.get(latestId);
-      node?.scrollIntoView({ block: "center", inline: "center" });
-    }
-  }, [selectedUserId, setSelectedUserId, userEntries]);
+    const node = filmstripItemRefs.current.get(selectedEntryId);
+    node?.scrollIntoView({ block: "center", inline: "center" });
+  }, [selectedEntryId]);
 
   const handleFilmstripSelect = useCallback((id: string) => {
     const node = filmstripItemRefs.current.get(id);
@@ -234,17 +159,13 @@ export default function Sketchstrip() {
   );
 
   const pendingEntryId = useMemo(() => {
-    for (let i = userEntries.length - 1; i >= 0; i -= 1) {
-      const entry = userEntries[i];
-      const hasAssistant = messages
-        .slice(entry.messageIndex + 1)
-        .some((message) => message?.role === "assistant");
-      if (!hasAssistant) {
-        return entry.id;
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      if (entries[i]?.status === "pending") {
+        return entries[i]?.id ?? null;
       }
     }
     return null;
-  }, [messages, userEntries]);
+  }, [entries]);
 
   if (!filmstripAttachments.length) {
     return null;
@@ -257,8 +178,8 @@ export default function Sketchstrip() {
           <MessageAttachments
             attachments={filmstripAttachments}
             pendingId={pendingEntryId}
-            selectedId={selectedUserId}
-            onSelect={setSelectedUserId}
+            selectedId={selectedEntryId}
+            onSelect={setSelectedEntryId}
             onSelectScroll={handleFilmstripSelect}
             getItemRef={getFilmstripItemRef}
           />

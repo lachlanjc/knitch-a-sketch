@@ -1,20 +1,27 @@
 "use client";
 
-import type { ChatStatus, UIMessage } from "ai";
+import type { Spec } from "@json-render/core";
 
 import { createContext, use } from "react";
 
+export interface SketchEntry {
+  id: string;
+  imageUrl: string;
+  spec: Spec | null;
+  status: "pending" | "ready" | "error";
+  createdAt: number;
+}
+
 export interface ProjectState {
-  messages: UIMessage[];
-  status: ChatStatus;
-  selectedUserId: string | null;
+  entries: SketchEntry[];
+  selectedEntryId: string | null;
 }
 
 export interface ProjectActions {
   submitSnapshot: (version: number, dataUrl: string) => Promise<void>;
   cancelPending: () => void;
   clearHistory: () => void;
-  setSelectedUserId: (id: string | null) => void;
+  setSelectedEntryId: (id: string | null) => void;
 }
 
 export interface ProjectMeta {

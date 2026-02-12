@@ -1,56 +1,65 @@
-import type { UIMessage } from "ai";
+import type { UserContent } from "ai";
 
-import { streamText, convertToModelMessages, Output } from "ai";
-import { z } from "zod";
+import { streamText } from "ai";
+
+import { catalog } from "@/lib/catalog";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
-const pieceSchema = z.object({
-  instructions: z.array(z.string()),
-  name: z
-    .string()
-    .describe(
-      "Start with a friendly adjective, e.g. Lucky Star, Special Snowflake, Oscillating Owl"
-    ),
-  quanity: z.number().int().positive().default(1),
-  yarn: z
-    .string()
-    .describe(
-      'Suggested yarn type in sentence case (e.g. "Worsted weight wool" or "Shiny speckled acrylic")'
-    ),
-  yarnColor: z
-    .string()
-    .regex(/^#([0-9a-fA-F]{6})$/)
-    .describe("Hex color for suggested yarn."),
-});
-
-const patternSchema = z.object({
-  pieces: z.array(pieceSchema),
-});
-
 export async function POST(req: Request) {
   const {
-    messages,
+    prompt,
+    context,
   }: {
-    messages: UIMessage[];
+    prompt?: string;
+    context?: { imageDataUrl?: string };
   } = await req.json();
 
+  console.log("[api/chat] prompt:", prompt);
+  console.log(
+    "[api/chat] imageDataUrl length:",
+    context?.imageDataUrl ? context.imageDataUrl.length : 0
+  );
+
+  const content: UserContent =
+    context?.imageDataUrl
+      ? [
+          {
+            type: "text",
+            text:
+              prompt ??
+              "Generate a knitting pattern UI from the provided sketch.",
+          },
+          {
+            type: "image",
+            image: context.imageDataUrl,
+          },
+        ]
+      : prompt ?? "Generate a knitting pattern UI.";
+
   const result = streamText({
-    messages: await convertToModelMessages(messages),
     model: "google/gemini-3-flash",
-    output: Output.object({
-      description: "Structured knitting pattern for a drawing.",
-      name: "knit_pattern",
-      schema: patternSchema,
+    system: catalog.prompt({
+      system:
+        "You are an expert knitter. Generate UI specs for knitting patterns from user sketches.",
+      customRules: [
+        "Always output JSONL patches using RFC 6902 (SpecStream).",
+        "Do not wrap output in markdown or code fences.",
+        "Root must be a PatternCarousel element.",
+        "Each PieceCard represents one knitting piece derived from the sketch.",
+        "Start each PieceCard name with a friendly adjective.",
+        "Use only components from the catalog.",
+      ],
     }),
-    system:
-      "You are an expert knitter. People send you drawings of things they want to knit. Return a structured object that matches the schema, with an array of pieces (oftentimes only 1).",
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
   });
 
-  // send sources and reasoning back to the client
-  return result.toUIMessageStreamResponse({
-    sendReasoning: true,
-    sendSources: true,
-  });
+  console.log("[api/chat] streaming spec response");
+  return result.toTextStreamResponse();
 }
