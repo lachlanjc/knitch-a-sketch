@@ -1,13 +1,13 @@
 "use client";
 
-import type { Spec } from "@json-render/core";
+import type { TreeSpec } from "@/lib/spec";
 
 import { createContext, use } from "react";
 
 export interface SketchEntry {
   id: string;
   imageUrl: string;
-  spec: Spec | null;
+  spec: TreeSpec | null;
   status: "pending" | "ready" | "error";
   createdAt: number;
 }

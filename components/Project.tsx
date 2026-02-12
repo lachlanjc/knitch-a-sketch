@@ -2,11 +2,12 @@
 
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
-import { useUIStream } from "@json-render/react";
+import { createSpecStreamCompiler } from "@json-render/core";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ProjectContextValue, SketchEntry } from "./ProjectContext";
+import type { TreeSpec } from "@/lib/spec";
 
 import Canvas from "./Canvas";
 import Chat from "./Chat";
@@ -67,14 +68,62 @@ const Project = ({ children }: PropsWithChildren) => {
   const [entries, setEntries] = useState<SketchEntry[]>([]);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
-  const { spec, send, clear } = useUIStream({
-    api: "/api/chat",
-    onComplete: (finalSpec) => {
-      console.log("[ui] spec complete", finalSpec);
-      const entryId = activeEntryIdRef.current;
-      if (!entryId) {
-        return;
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const streamSpec = useCallback(async (entryId: string, dataUrl: string) => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, status: "pending" } : entry
+      )
+    );
+
+    const compiler = createSpecStreamCompiler<TreeSpec>({});
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "Generate a knitting pattern UI for this sketch.",
+          context: { imageDataUrl: dataUrl },
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
       }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        const chunk = decoder.decode(value, { stream: true });
+        const { result, newPatches } = compiler.push(chunk);
+        if (newPatches.length > 0) {
+          console.log("[ui] spec patch", result);
+          setEntries((prev) =>
+            prev.map((entry) =>
+              entry.id === entryId
+                ? { ...entry, spec: result, status: "pending" }
+                : entry
+            )
+          );
+        }
+      }
+
+      const finalSpec = compiler.getResult();
+      console.log("[ui] spec complete", finalSpec);
       setEntries((prev) =>
         prev.map((entry) =>
           entry.id === entryId
@@ -83,22 +132,22 @@ const Project = ({ children }: PropsWithChildren) => {
         )
       );
       setSelectedEntryId(entryId);
-      activeEntryIdRef.current = null;
-    },
-    onError: () => {
-      console.log("[ui] spec error");
-      const entryId = activeEntryIdRef.current;
-      if (!entryId) {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
         return;
       }
+      console.log("[ui] spec error", err);
       setEntries((prev) =>
         prev.map((entry) =>
           entry.id === entryId ? { ...entry, status: "error" } : entry
         )
       );
-      activeEntryIdRef.current = null;
-    },
-  });
+    } finally {
+      if (activeEntryIdRef.current === entryId) {
+        activeEntryIdRef.current = null;
+      }
+    }
+  }, []);
 
   const cancelPending = useCallback(() => {
     const entryId = activeEntryIdRef.current;
@@ -106,10 +155,10 @@ const Project = ({ children }: PropsWithChildren) => {
       return;
     }
     activeEntryIdRef.current = null;
-    clear();
+    abortControllerRef.current?.abort();
     setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
     setSelectedEntryId((prev) => (prev === entryId ? null : prev));
-  }, [clear]);
+  }, []);
 
   const submitSnapshot = useCallback(
     async (version: number, dataUrl: string) => {
@@ -135,13 +184,11 @@ const Project = ({ children }: PropsWithChildren) => {
           createdAt: Date.now(),
         },
       ]);
-      setSelectedEntryId((prev) => (prev ? prev : entryId));
+      setSelectedEntryId(entryId);
 
-      void send("Generate a knitting pattern UI for this sketch.", {
-        imageDataUrl: dataUrl,
-      });
+      void streamSpec(entryId, dataUrl);
     },
-    [cancelPending, send]
+    [cancelPending, streamSpec]
   );
 
   const clearHistory = useCallback(() => {
@@ -149,7 +196,7 @@ const Project = ({ children }: PropsWithChildren) => {
     lastSubmittedVersionRef.current = null;
     activeEntryIdRef.current = null;
     setSelectedEntryId(null);
-    clear();
+    abortControllerRef.current?.abort();
     if (typeof window === "undefined") {
       return;
     }
@@ -158,7 +205,7 @@ const Project = ({ children }: PropsWithChildren) => {
     } catch {
       // Ignore storage errors
     }
-  }, [clear]);
+  }, []);
 
   useEffect(() => {
     if (hasLoadedHistoryRef.current) {
@@ -209,19 +256,6 @@ const Project = ({ children }: PropsWithChildren) => {
       // Ignore storage write failures
     }
   }, [entries]);
-
-  useEffect(() => {
-    const entryId = activeEntryIdRef.current;
-    if (!entryId || !spec) {
-      return;
-    }
-    console.log("[ui] spec patch", spec);
-    setEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === entryId ? { ...entry, spec, status: "pending" } : entry
-      )
-    );
-  }, [spec]);
 
   const contextValue = useMemo<ProjectContextValue>(
     () => ({

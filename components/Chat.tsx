@@ -4,6 +4,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { useMemo } from "react";
 
 import { registry } from "@/lib/registry";
+import { treeToFlatSpec } from "@/lib/spec";
 
 import Generating from "./Generating";
 import { useProjectContext } from "./ProjectContext";
@@ -29,13 +30,15 @@ export default function Chat({ className }: ChatProps) {
     return null;
   }, [selectedEntry]);
 
-  const hasRenderableSpec = Boolean(
-    selectedEntry?.spec && selectedEntry.spec.root
-  );
   const initialState = useMemo(
     () => (selectedEntry?.spec?.state as Record<string, unknown>) ?? {},
     [selectedEntry?.spec?.state]
   );
+  const flatSpec = useMemo(
+    () => treeToFlatSpec(selectedEntry?.spec ?? null),
+    [selectedEntry?.spec]
+  );
+  const hasRenderableSpec = Boolean(flatSpec?.root);
 
   return (
     <div className={className}>
@@ -44,22 +47,18 @@ export default function Chat({ className }: ChatProps) {
           hasRenderableSpec ? (
             <JSONUIProvider registry={registry} initialState={initialState}>
               <Renderer
-                spec={selectedEntry.spec}
+                spec={flatSpec}
                 registry={registry}
                 loading={selectedEntry.status === "pending"}
               />
             </JSONUIProvider>
-          ) : selectedEntry.status === "pending" ? (
-            <div className="grid min-h-[40vh] place-items-center text-sm text-zinc-400">
-              <Generating />
-            </div>
           ) : selectedEntry.status === "error" ? (
             <div className="grid min-h-[40vh] place-items-center text-sm text-zinc-400">
               Something went wrong. Try sketching again.
             </div>
           ) : (
             <div className="grid min-h-[40vh] place-items-center text-sm text-zinc-400">
-              No response yet.
+              <Generating />
             </div>
           )
         ) : (

@@ -1,21 +1,26 @@
 import type { Metadata } from "next";
 
-import { Faculty_Glyphic, Nunito_Sans } from "next/font/google";
+import localFont from "next/font/local";
 
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-const nunitoSans = Nunito_Sans({ variable: "--font-sans" });
-
-const flared = Faculty_Glyphic({
-  variable: "--font-faculty-glyphic",
-  weight: "400",
+const appSans = localFont({
+  display: "swap",
+  src: [
+    {
+      path: "./fonts/ABCDailySlabEdu-Regular.woff2",
+      style: "normal",
+      weight: "400",
+    },
+    {
+      path: "./fonts/ABCDailySlabEdu-Bold.woff2",
+      style: "normal",
+      weight: "700",
+    },
+  ],
+  variable: "--font-sans",
 });
-
-// const geistMono = Geist_Mono({
-//   variable: "--font-geist-mono",
-//   subsets: ["latin"],
-// });
 
 export const metadata: Metadata = {
   description: "",
@@ -28,8 +33,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={nunitoSans.variable}>
-      <body className={`${flared.variable} antialiased`}>
+    <html lang="en">
+      <body className={`${appSans.variable} antialiased`}>
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
