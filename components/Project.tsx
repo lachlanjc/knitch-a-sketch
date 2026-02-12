@@ -55,7 +55,7 @@ const ProjectCanvas = ({ idleMs = 500, ...props }: ProjectCanvasProps) => {
 };
 
 const ProjectPanel = ({ children }: ProjectPanelProps) => (
-  <section className="p-6 lg:p-10">{children}</section>
+  <section className="px-6 lg:px-10">{children}</section>
 );
 
 const ProjectChat = (props: ProjectChatProps) => <Chat {...props} />;

@@ -2,47 +2,28 @@ import { defineCatalog } from "@json-render/core";
 import { defineSchema } from "@json-render/core";
 import { z } from "zod";
 
-const schema = defineSchema((s) => {
-  const optional = <T extends Record<string, unknown>>(type: T) =>
-    ({ ...type, ...s.optional() }) as T;
-
-  return {
-    spec: s.object({
-      root: s.string(),
-      elements: s.record(
-        s.object({
-          type: s.string(),
-          props: s.any(),
-          children: optional(s.array(s.string())),
-          visible: optional(s.any()),
-          repeat: optional(
-            s.object({
-              path: s.string(),
-              key: optional(s.string()),
-            })
-          ),
-          on: optional(s.any()),
-        })
-      ),
-      state: optional(s.record(s.any())),
-    }),
-    catalog: s.object({
-      components: s.record(
-        s.object({
-          props: s.any(),
-          slots: optional(s.array(s.string())),
-          description: optional(s.string()),
-        })
-      ),
-      actions: s.record(
-        s.object({
-          params: optional(s.any()),
-          description: optional(s.string()),
-        })
-      ),
-    }),
-  };
-});
+const schema = defineSchema((s) => ({
+  spec: s.object({
+    root: s.string(),
+    elements: s.record(s.any()),
+    state: s.any(),
+  }),
+  catalog: s.object({
+    components: s.record(
+      s.object({
+        props: s.any(),
+        slots: s.any(),
+        description: s.any(),
+      })
+    ),
+    actions: s.record(
+      s.object({
+        params: s.any(),
+        description: s.any(),
+      })
+    ),
+  }),
+}));
 
 const yarnColorSchema = z
   .string()

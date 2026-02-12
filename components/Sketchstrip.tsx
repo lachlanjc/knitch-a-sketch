@@ -75,7 +75,7 @@ const MessageAttachments = ({
     className="w-full"
     opts={{ align: "start", dragFree: true }}
   >
-    <CarouselContent className="px-2 -ml-2 gap-3 snap-x snap-mandatory">
+    <CarouselContent className="p-2 gap-3 snap-x snap-mandatory">
       {attachments.map((file) => {
         const isSelected = file.id === selectedId;
         const isPending = file.id === pendingId;
